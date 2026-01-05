@@ -843,6 +843,14 @@ if __name__ == "__main__":
                 candidates_total[intervention].update(candidate)
                 das_weights[intervention].update(weight)
                 feature_counts_total[intervention] = feature_counts
+            elif intervention_type == 'vanilla':
+                # Vanilla intervention doesn't need training - skip and go directly to test mode
+                print(f"Skipping training for vanilla intervention '{intervention}' - use --test mode directly")
+                # Generate placeholder candidates (all layer/pos combinations) for test mode
+                for layer in layers:
+                    for pos in poss:
+                        candidates_total[intervention][f"L{layer}_P{pos}"] = 0.0  # Placeholder accuracy
+                # No weights for vanilla intervention
             else:
                 # Use standard DAS (fixed subspace dimension)
                 candidate, weight = find_candidate_alignments(
@@ -876,6 +884,12 @@ if __name__ == "__main__":
             with open(f"training_results/feature_counts_boundless_{causal_model_tag}_pretrain.json", "w") as f:
                 json.dump(feature_counts_total, f, indent=4)
             print(f"Feature counts saved to training_results/feature_counts_boundless_{causal_model_tag}_pretrain.json")
+        elif intervention_type == 'vanilla':
+            # Save vanilla results (no weights needed)
+            with open(f"training_results/candidates_vanilla_{causal_model_tag}_pretrain.json", "w") as f:
+                json.dump(candidates_total, f, indent=4)
+            print(f"Candidate alignments saved to training_results/candidates_vanilla_{causal_model_tag}_pretrain.json")
+            # No weights to save for vanilla intervention
         else:
             # Save standard DAS results
             with open(f"training_results/candidates_{intervention_type}_{causal_model_tag}_dim{subspace_dimension}_pretrain.json", "w") as f:
@@ -915,6 +929,22 @@ if __name__ == "__main__":
             das_weights = load_weight(args.weights_path)
             with open(args.candidates_path, "r") as f:
                 candidates_total = json.load(f)
+        
+        elif args.intervention_type == 'vanilla':
+            # Vanilla intervention doesn't need weights or pre-trained candidates
+            das_weights = {}  # Empty dict, vanilla doesn't use weights
+            
+            if args.candidates_path:
+                # If user provides a candidates file, use it
+                with open(args.candidates_path, "r") as f:
+                    candidates_total = json.load(f)
+                print(f"Loaded candidates from {args.candidates_path}")
+            else:
+                # Auto-generate all layer/pos combinations
+                # We'll populate candidates_total per intervention after creating the dataset
+                candidates_total = None  # Will be generated per intervention
+                print("Vanilla intervention: will auto-generate all layer/pos combinations")
+            print("Using Vanilla intervention for testing (no weights needed)")
 
         test_results = {}
         # Dictionary to store analysis datasets for each (pos, layer) combination
@@ -981,7 +1011,24 @@ if __name__ == "__main__":
                     features_list.append(features)
 
                 # get the candidates for this intervention
-                candidates = candidates_total.get(intervention, {})
+                if candidates_total is None and intervention_type == 'vanilla':
+                    # Auto-generate all layer/pos combinations for vanilla
+                    # First, get pos range from the dataset (same logic as training mode)
+                    pos_after_sub_token, input_length = find_positional_indices(
+                        sample_input_id=dataset[0]["input_ids"],
+                        tokenizer=tokenizer,
+                        sub_token='logic_function('
+                    )
+                    if args.pos_start is not None and args.pos_end is not None:
+                        poss = range(args.pos_start, args.pos_end)
+                    else:
+                        poss = range(pos_after_sub_token+7, input_length)
+                    
+                    # Generate all layer/pos combinations
+                    candidates = {f"L{layer}_P{pos}": 0.0 for layer in layers for pos in poss}
+                    print(f"Auto-generated {len(candidates)} layer/pos combinations for vanilla testing")
+                else:
+                    candidates = candidates_total.get(intervention, {})
                 weights_for_intervention = das_weights.get(intervention, {}) if isinstance(das_weights, dict) else das_weights
 
                 results = {}
@@ -991,7 +1038,8 @@ if __name__ == "__main__":
                 for candidate in candidates.keys():
                     layer, pos = extract_layer_pos(candidate)
                     weight = weights_for_intervention.get(candidate)
-                    if weight is None:
+                    # Skip weight check for vanilla intervention (it doesn't use weights)
+                    if weight is None and intervention_type not in ['vanilla']:
                         print(f"Warning: weight for candidate {candidate} not found; skipping")
                         continue
                     
@@ -1005,6 +1053,18 @@ if __name__ == "__main__":
                             dataset,
                             batch_size=batch_size,
                             weight=weight,
+                            return_details=True
+                        )
+                    elif intervention_type == 'vanilla':
+                        acc, details = test_with_weights(
+                            model,
+                            layer,
+                            device,
+                            pos,
+                            dataset,
+                            batch_size=batch_size,
+                            intervention_type='vanilla',
+                            weight=None,  # Vanilla doesn't use weights
                             return_details=True
                         )
                     else:
