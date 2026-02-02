@@ -1,5 +1,8 @@
 #!/usr/bin/env -S uv run python
 """
+DEPRECATED: This task is outdated and may not reflect current best practices.
+See causalab/tasks/MCQA/ for an up-to-date example.
+
 Script 1: Generate and Filter Counterfactual Dataset
 
 This script:
@@ -30,9 +33,11 @@ from causalab.tasks.general_addition.config import (
 )
 from causalab.tasks.general_addition.causal_models import create_basic_addition_model
 from causalab.tasks.general_addition.counterfactuals import random_counterfactual
+from datasets import Dataset
 from causalab.neural.pipeline import LMPipeline
-from causalab.causal.counterfactual_dataset import CounterfactualDataset
-from causalab.experiments.filter_experiment import FilterExperiment
+from causalab.causal.counterfactual_dataset import CounterfactualExample
+from causalab.causal.causal_utils import generate_counterfactual_samples
+from causalab.experiments.filter import filter_dataset
 
 
 def main():
@@ -120,7 +125,7 @@ def main():
 
     # Generate counterfactual dataset
     print(f"Generating {args.size} counterfactual pairs using random_counterfactual...")
-    dataset = CounterfactualDataset.from_sampler(
+    dataset: list[CounterfactualExample] = generate_counterfactual_samples(
         args.size, lambda: random_counterfactual(config, 2, args.digits)
     )
     print(f"✓ Generated {len(dataset)} pairs")
@@ -130,12 +135,17 @@ def main():
     print("Example pair:")
     example_input = dataset[0]["input"]
     example_cf = dataset[0]["counterfactual_inputs"][0]
-    print(f"  Input:  {example_input['raw_input']}")
-    # Compute answer for display
-    example_output = causal_model.run_forward(example_input)
+    # example_input can be dict or CausalTrace - handle both
+    raw_input = example_input["raw_input"] if isinstance(example_input, dict) else example_input["raw_input"]
+    print(f"  Input:  {raw_input}")
+    # Compute answer for display - new_trace expects dict, convert if needed
+    input_dict = example_input if isinstance(example_input, dict) else example_input.to_dict()  # type: ignore[union-attr]
+    example_output = causal_model.new_trace(input_dict)
     print(f"  Answer: {example_output['raw_output']}")
-    print(f"  Counter: {example_cf['raw_input']}")
-    cf_output = causal_model.run_forward(example_cf)
+    cf_raw_input = example_cf["raw_input"] if isinstance(example_cf, dict) else example_cf["raw_input"]
+    print(f"  Counter: {cf_raw_input}")
+    cf_dict = example_cf if isinstance(example_cf, dict) else example_cf.to_dict()  # type: ignore[union-attr]
+    cf_output = causal_model.new_trace(cf_dict)
     print(f"  Answer: {cf_output['raw_output']}")
     print()
 
@@ -151,7 +161,6 @@ def main():
         dtype=torch.bfloat16 if device == "cuda" else torch.float32,
         max_length=64,
     )
-    pipeline.tokenizer.padding_side = "left"
     print("✓ Model loaded")
     print()
 
@@ -179,14 +188,13 @@ def main():
 
     # Filter the dataset
     print("Filtering dataset based on model performance...")
-    experiment = FilterExperiment(pipeline, causal_model, checker)
-
-    datasets_dict = {"random_cf": dataset}
-    filtered_datasets = experiment.filter(
-        datasets_dict, verbose=True, batch_size=args.batch_size
+    filtered_dataset = filter_dataset(
+        dataset=dataset,
+        pipeline=pipeline,
+        causal_model=causal_model,
+        metric=checker,
+        batch_size=args.batch_size,
     )
-
-    filtered_dataset = filtered_datasets["random_cf"]
     print()
     print("Filtering results:")
     print(f"  Original: {len(dataset)} examples")
@@ -212,7 +220,7 @@ def main():
 
     dataset_path = output_path / "filtered_dataset"
     print(f"Saving filtered dataset to {dataset_path}...")
-    filtered_dataset.dataset.save_to_disk(str(dataset_path))
+    Dataset.from_list(filtered_dataset).save_to_disk(str(dataset_path))
     print("✓ Dataset saved")
     print()
 

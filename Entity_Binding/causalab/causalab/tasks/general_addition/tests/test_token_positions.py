@@ -1,4 +1,7 @@
 """
+DEPRECATED: This task is outdated and may not reflect current best practices.
+See causalab/tasks/MCQA/ for an up-to-date example.
+
 Test token positions for general addition task.
 
 This script tests token position functions by loading a model and using
@@ -55,7 +58,7 @@ def check_token_positions_with_model(model_name: str, num_digits: int = 2):
     # Generate a sample input
     print("\nGenerating sample input...")
     input_sample = sample_valid_addition_input(config, 2, num_digits)
-    output = causal_model.run_forward(input_sample)
+    output = causal_model.new_trace(input_sample)
 
     print(f"\nPrompt: {output['raw_input']}")
     print(f"Answer: {output['raw_output']}")

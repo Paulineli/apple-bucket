@@ -1,4 +1,7 @@
 """
+DEPRECATED: This task is outdated and may not reflect current best practices.
+See causalab/tasks/MCQA/ for an up-to-date example.
+
 Tests for the intermediate addition causal model.
 
 Tests verify:
@@ -34,7 +37,7 @@ class TestIntermediateModelCorrectness:
             "template": config.templates[0],
         }
 
-        output = model.run_forward(input_sample)
+        output = model.new_trace(input_sample)
 
         # Check raw output
         assert output["raw_output"].strip() == "68"
@@ -62,7 +65,7 @@ class TestIntermediateModelCorrectness:
             "template": config.templates[0],
         }
 
-        output = model.run_forward(input_sample)
+        output = model.new_trace(input_sample)
 
         # Check raw output
         assert output["raw_output"].strip() == "72"
@@ -90,7 +93,7 @@ class TestIntermediateModelCorrectness:
             "template": config.templates[0],
         }
 
-        output = model.run_forward(input_sample)
+        output = model.new_trace(input_sample)
 
         # Check raw output
         assert output["raw_output"].strip() == "125"
@@ -120,7 +123,7 @@ class TestIntermediateModelCorrectness:
             "template": config.templates[0],
         }
 
-        output = model.run_forward(input_sample)
+        output = model.new_trace(input_sample)
 
         # Check raw output
         assert output["raw_output"].strip() == "579"
@@ -152,7 +155,7 @@ class TestIntermediateModelCorrectness:
             "template": config.templates[0],
         }
 
-        output = model.run_forward(input_sample)
+        output = model.new_trace(input_sample)
 
         # Check raw output
         assert output["raw_output"].strip() == "1665"
@@ -187,16 +190,16 @@ class TestIntermediateModelInterventions:
             "template": config.templates[0],
         }
 
-        output_original = model.run_forward(input_sample)
-        assert output_original["C_1"] == 0
-        assert output_original["O_2"] == 6  # 2 + 4 + 0 = 6
+        output_original = model.new_trace(input_sample)
+        assert output_original['C_1'] == 0
+        assert output_original['O_2'] == 6  # 2 + 4 + 0 = 6
 
         # Intervene: force C_1 = 1 (as if ones place generated a carry)
-        output_intervened = model.run_forward({**input_sample, "C_1": 1})
-        assert output_intervened["C_1"] == 1
-        assert output_intervened["O_1"] == 8  # ones unchanged
-        assert output_intervened["O_2"] == 7  # 2 + 4 + 1 = 7 (affected by carry)
-        assert output_intervened["raw_output"].strip() == "78"
+        output_intervened = model.new_trace({**input_sample, 'C_1': 1})
+        assert output_intervened['C_1'] == 1
+        assert output_intervened['O_1'] == 8  # ones unchanged
+        assert output_intervened['O_2'] == 7  # 2 + 4 + 1 = 7 (affected by carry)
+        assert output_intervened['raw_output'].strip() == '78'
 
     def test_intervene_on_O_1(self):
         """Test intervening on O_1 (ones place output)."""
@@ -212,13 +215,13 @@ class TestIntermediateModelInterventions:
             "template": config.templates[0],
         }
 
-        output_original = model.run_forward(input_sample)
-        assert output_original["O_1"] == 8
-        assert output_original["raw_output"].strip() == "68"
+        output_original = model.new_trace(input_sample)
+        assert output_original['O_1'] == 8
+        assert output_original['raw_output'].strip() == '68'
 
         # Intervene: force O_1 = 9
-        output_intervened = model.run_forward({**input_sample, "O_1": 9})
-        assert output_intervened["O_1"] == 9
+        output_intervened = model.new_trace({**input_sample, 'O_1': 9})
+        assert output_intervened['O_1'] == 9
         # Note: O_2 is not affected because it doesn't depend on O_1
         assert output_intervened["O_2"] == 6
         assert output_intervened["raw_output"].strip() == "69"
@@ -239,17 +242,17 @@ class TestIntermediateModelInterventions:
             "template": config.templates[0],
         }
 
-        output_original = model.run_forward(input_sample)
-        assert output_original["C_1"] == 0  # 9 + 0 = 9 < 10
-        assert output_original["C_2"] == 0  # 2 + 4 + 0 = 6 < 10
-        assert output_original["raw_output"].strip() == "69"
+        output_original = model.new_trace(input_sample)
+        assert output_original['C_1'] == 0  # 9 + 0 = 9 < 10
+        assert output_original['C_2'] == 0  # 2 + 4 + 0 = 6 < 10
+        assert output_original['raw_output'].strip() == '69'
 
         # Intervene: force C_1 = 1
-        output_intervened = model.run_forward({**input_sample, "C_1": 1})
-        assert output_intervened["C_1"] == 1
-        assert output_intervened["O_2"] == 7  # 2 + 4 + 1 = 7
-        assert output_intervened["C_2"] == 0  # 2 + 4 + 1 = 7 < 10
-        assert output_intervened["raw_output"].strip() == "79"
+        output_intervened = model.new_trace({**input_sample, 'C_1': 1})
+        assert output_intervened['C_1'] == 1
+        assert output_intervened['O_2'] == 7  # 2 + 4 + 1 = 7
+        assert output_intervened['C_2'] == 0  # 2 + 4 + 1 = 7 < 10
+        assert output_intervened['raw_output'].strip() == '79'
 
     def test_intervene_triggers_further_carry(self):
         """Test that forcing a carry can trigger additional carries."""
@@ -266,19 +269,19 @@ class TestIntermediateModelInterventions:
             "template": config.templates[0],
         }
 
-        output_original = model.run_forward(input_sample)
-        assert output_original["C_1"] == 0  # 9 + 0 = 9 < 10
-        assert output_original["C_2"] == 0  # 2 + 7 + 0 = 9 < 10
-        assert output_original["O_3"] == 0  # no carry out
-        assert output_original["raw_output"].strip() == "99"
+        output_original = model.new_trace(input_sample)
+        assert output_original['C_1'] == 0  # 9 + 0 = 9 < 10
+        assert output_original['C_2'] == 0  # 2 + 7 + 0 = 9 < 10
+        assert output_original['O_3'] == 0  # no carry out
+        assert output_original['raw_output'].strip() == '99'
 
         # Intervene: force C_1 = 1
-        output_intervened = model.run_forward({**input_sample, "C_1": 1})
-        assert output_intervened["C_1"] == 1
-        assert output_intervened["O_2"] == 0  # (2 + 7 + 1) % 10 = 10 % 10 = 0
-        assert output_intervened["C_2"] == 1  # 2 + 7 + 1 = 10 >= 10
-        assert output_intervened["O_3"] == 1  # carry out!
-        assert output_intervened["raw_output"].strip() == "109"
+        output_intervened = model.new_trace({**input_sample, 'C_1': 1})
+        assert output_intervened['C_1'] == 1
+        assert output_intervened['O_2'] == 0  # (2 + 7 + 1) % 10 = 10 % 10 = 0
+        assert output_intervened['C_2'] == 1  # 2 + 7 + 1 = 10 >= 10
+        assert output_intervened['O_3'] == 1  # carry out!
+        assert output_intervened['raw_output'].strip() == '109'
 
     def test_interchange_intervention(self):
         """Test interchange intervention between two examples."""
@@ -305,8 +308,8 @@ class TestIntermediateModelInterventions:
             "template": config.templates[0],
         }
 
-        output_1 = model.run_forward(input_1)
-        output_2 = model.run_forward(input_2)
+        output_1 = model.new_trace(input_1)
+        output_2 = model.new_trace(input_2)
 
         # Original outputs
         assert output_1["C_1"] == 0
@@ -315,7 +318,8 @@ class TestIntermediateModelInterventions:
         assert output_2["raw_output"].strip() == "72"
 
         # Interchange C_1 from input_2 into input_1
-        intervened = model.run_interchange(input_1, {"C_1": input_2})
+        intervened = input_1.copy()
+        intervened["C_1"] = input_2["C_1"]
         assert intervened["C_1"] == 1  # took from input_2
         assert intervened["O_2"] == 7  # 2 + 4 + 1 = 7
         assert intervened["raw_output"].strip() == "78"
@@ -338,10 +342,10 @@ class TestIntermediateModelEdgeCases:
             "template": config.templates[0],
         }
 
-        output = model.run_forward(input_sample)
-        assert output["raw_output"].strip() == "0"
-        assert output["C_1"] == 0
-        assert output["C_2"] == 0
+        output = model.new_trace(input_sample)
+        assert output['raw_output'].strip() == '0'
+        assert output['C_1'] == 0
+        assert output['C_2'] == 0
 
     def test_maximum_two_digit(self):
         """Test 99 + 99 = 198."""
@@ -357,13 +361,13 @@ class TestIntermediateModelEdgeCases:
             "template": config.templates[0],
         }
 
-        output = model.run_forward(input_sample)
-        assert output["raw_output"].strip() == "198"
-        assert output["C_1"] == 1  # 9 + 9 = 18 >= 10
-        assert output["C_2"] == 1  # 9 + 9 + 1 = 19 >= 10
-        assert output["O_1"] == 8
-        assert output["O_2"] == 9
-        assert output["O_3"] == 1
+        output = model.new_trace(input_sample)
+        assert output['raw_output'].strip() == '198'
+        assert output['C_1'] == 1  # 9 + 9 = 18 >= 10
+        assert output['C_2'] == 1  # 9 + 9 + 1 = 19 >= 10
+        assert output['O_1'] == 8
+        assert output['O_2'] == 9
+        assert output['O_3'] == 1
 
     def test_sum_to_ten_exactly(self):
         """Test when digits sum to exactly 10."""
@@ -380,13 +384,13 @@ class TestIntermediateModelEdgeCases:
             "template": config.templates[0],
         }
 
-        output = model.run_forward(input_sample)
-        assert output["raw_output"].strip() == "100"
-        assert output["C_1"] == 1  # 9 + 1 = 10 >= 10
-        assert output["C_2"] == 1  # 1 + 8 + 1 = 10 >= 10
-        assert output["O_1"] == 0  # 10 % 10
-        assert output["O_2"] == 0  # 10 % 10
-        assert output["O_3"] == 1  # carry out
+        output = model.new_trace(input_sample)
+        assert output['raw_output'].strip() == '100'
+        assert output['C_1'] == 1  # 9 + 1 = 10 >= 10
+        assert output['C_2'] == 1  # 1 + 8 + 1 = 10 >= 10
+        assert output['O_1'] == 0  # 10 % 10
+        assert output['O_2'] == 0  # 10 % 10
+        assert output['O_3'] == 1  # carry out
 
 
 class TestVariableNaming:

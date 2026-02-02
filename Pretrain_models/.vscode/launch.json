@@ -1,0 +1,61 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug run_das.py (Full Run)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/Multi_Variable_Causal_Abstraction/Entity_Binding/hypothesis_testing/run_das.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--gpu", "1",
+                "--size", "500",
+                "--batch-size", "16",
+                "--num-groups", "6",
+                "--min-accuracy", "0.6",
+                "--layers", "31",
+                "--task-type", "filling_liquids",
+                "--model", "Qwen/Qwen2.5-3B-Instruct",
+            ],
+            "cwd": "${workspaceFolder}/Multi_Variable_Causal_Abstraction/Entity_Binding/hypothesis_testing/",
+            "env": {
+                "PYTHONPATH": "bin/python3.8",
+            },
+            "justMyCode": false
+        },
+        {
+            "name": "Debug das.py (train) - Legacy",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/Local/Pretrain_models/das.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--train",
+                "--batch-size", "6",
+                "--data-size", "150",
+                "--causal-model", "1",
+                "--local-model-dir", "qwen3",
+                "--subspace-dimension", "5"
+            ],
+            "cwd": "${workspaceFolder}/Local/Pretrain_models"
+        },
+        {
+            "name": "Debug das.py (test) - Boundless",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/Multi_Variable_Causal_Abstraction/Pretrain_models/das.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--test",
+                "--batch-size", "16",
+                "--model-id", "Qwen/Qwen3-14B",
+                "--causal-model", "1",
+                "--data-size", "1024",
+                "--intervention-type", "boundless",
+                "--weights-path", "result_op2/L20_P368_extracted.pt",
+                "--candidates-path", "result_op2/candidates_high.json"
+            ],
+            "cwd": "${workspaceFolder}/Multi_Variable_Causal_Abstraction/Pretrain_models"
+        }
+    ]
+}

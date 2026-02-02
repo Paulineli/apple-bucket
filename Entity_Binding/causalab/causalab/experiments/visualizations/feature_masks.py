@@ -1,5 +1,5 @@
 """
-Visualization functions for feature count heatmaps (Boundless DAS with tie_masks=False).
+Visualization functions for feature count heatmaps (DBM with tie_masks=False).
 
 These visualizations show feature counts (number of selected features) for mask-based
 interventions where each model unit can select a subset of features.
@@ -8,6 +8,10 @@ Supports both:
 - Single score mode: One accuracy value for all units
 - Per-layer score mode: Separate accuracy value per layer
 
+n_features can be specified as:
+- int: Same number of features for all units
+- Dict[str, int]: Per-unit n_features keyed by unit_id
+
 Component types:
 - Attention heads: (layer, head) grid
 - Residual stream: (layer, token_position) grid
@@ -15,6 +19,7 @@ Component types:
 """
 
 from typing import Any, Dict, List, Optional, Union, cast
+
 import numpy as np
 
 from .unit_id import (
@@ -30,10 +35,38 @@ from .unit_id import (
 )
 from .utils import create_feature_count_heatmap
 
+# Type alias for n_features parameter
+NFeatures = Union[int, Dict[str, int]]
+
 
 # =============================================================================
 # Helper Functions
 # =============================================================================
+
+
+def _get_n_features_for_unit(n_features: NFeatures, unit_id: str) -> int:
+    """
+    Get n_features for a specific unit.
+
+    Args:
+        n_features: Either an int (same for all units) or Dict[str, int] (per-unit)
+        unit_id: The unit ID to look up
+
+    Returns:
+        Number of features for this unit
+
+    Raises:
+        ValueError: If n_features is a dict and unit_id is not found
+    """
+    if isinstance(n_features, int):
+        return n_features
+    else:
+        if unit_id not in n_features:
+            raise ValueError(
+                f"Unit ID '{unit_id}' not found in n_features dict. "
+                f"Available keys: {list(n_features.keys())}"
+            )
+        return n_features[unit_id]
 
 
 def count_selected_features(indices: Optional[List[int]], n_features: int) -> int:
@@ -62,7 +95,7 @@ def _build_attention_head_matrix(
     feature_indices: FeatureIndicesUnion,
     layers: List[int],
     heads: List[int],
-    n_features: int,
+    n_features: NFeatures,
 ) -> np.ndarray[Any, np.dtype[Any]]:
     """Build feature count matrix for attention heads."""
     num_layers = len(layers)
@@ -82,8 +115,9 @@ def _build_attention_head_matrix(
                     _, head = extract_layer_head_from_unit_id(unit_id)
                     if head in heads:
                         head_idx = heads.index(head)
+                        unit_n_features = _get_n_features_for_unit(n_features, unit_id)
                         count_matrix[layer_idx, head_idx] = count_selected_features(
-                            indices, n_features
+                            indices, unit_n_features
                         )
                 except ValueError:
                     continue
@@ -97,8 +131,9 @@ def _build_attention_head_matrix(
                 if layer in layers and head in heads:
                     layer_idx = layers.index(layer)
                     head_idx = heads.index(head)
+                    unit_n_features = _get_n_features_for_unit(n_features, unit_id)
                     count_matrix[layer_idx, head_idx] = count_selected_features(
-                        indices, n_features
+                        indices, unit_n_features
                     )
             except ValueError:
                 continue
@@ -110,7 +145,7 @@ def _build_position_based_matrix(
     feature_indices: FeatureIndicesUnion,
     layers: List[int],
     token_position_ids: List[str],
-    n_features: int,
+    n_features: NFeatures,
     component_marker: str,
 ) -> np.ndarray[Any, np.dtype[Any]]:
     """Build feature count matrix for residual stream or MLP."""
@@ -131,8 +166,9 @@ def _build_position_based_matrix(
                     token_pos_id = extract_token_position_from_unit_id(unit_id)
                     if token_pos_id in token_position_ids:
                         pos_idx = token_position_ids.index(token_pos_id)
+                        unit_n_features = _get_n_features_for_unit(n_features, unit_id)
                         count_matrix[layer_idx, pos_idx] = count_selected_features(
-                            indices, n_features
+                            indices, unit_n_features
                         )
                 except ValueError:
                     continue
@@ -147,8 +183,9 @@ def _build_position_based_matrix(
                 if layer in layers and token_pos_id in token_position_ids:
                     layer_idx = layers.index(layer)
                     pos_idx = token_position_ids.index(token_pos_id)
+                    unit_n_features = _get_n_features_for_unit(n_features, unit_id)
                     count_matrix[layer_idx, pos_idx] = count_selected_features(
-                        indices, n_features
+                        indices, unit_n_features
                     )
             except ValueError:
                 continue
@@ -168,7 +205,7 @@ def plot_attention_head_feature_counts(
     scores: Union[float, Dict[int, float]],
     layers: List[int],
     heads: List[int],
-    n_features: int,
+    n_features: NFeatures,
     title: Optional[str] = None,
     save_path: Optional[str] = None,
 ) -> None:
@@ -187,6 +224,7 @@ def plot_attention_head_feature_counts(
         layers: List of layer indices (y-axis).
         heads: List of head indices (x-axis).
         n_features: Total number of features per head (head_dim).
+            Can be int (same for all) or Dict[str, int] (per-unit).
         title: Optional custom title.
         save_path: Optional path to save figure.
     """
@@ -211,7 +249,7 @@ def plot_attention_head_feature_counts(
         ylabel="Layer",
         colorbar_label="Feature Count",
         save_path=save_path,
-        flip_vertical=False,
+        flip_vertical=True,  # Lowest layer at bottom, highest at top
         figsize=(max(12, len(heads) * 0.5 + 2), max(6, len(layers) * 0.4)),
         show_accuracy_column=show_accuracy_column,
     )
@@ -224,7 +262,7 @@ def plot_residual_stream_feature_counts(
     scores: Union[float, Dict[int, float]],
     layers: List[int],
     token_position_ids: List[str],
-    n_features: int,
+    n_features: NFeatures,
     title: Optional[str] = None,
     save_path: Optional[str] = None,
     score_label: str = "Acc",
@@ -244,6 +282,7 @@ def plot_residual_stream_feature_counts(
         layers: List of layer indices (will be displayed bottom-to-top).
         token_position_ids: List of token position IDs (x-axis).
         n_features: Total number of features per unit (hidden_size).
+            Can be int (same for all) or Dict[str, int] (per-unit).
         title: Optional custom title.
         save_path: Optional path to save figure.
         score_label: Label for the accuracy column (default: "Acc").
@@ -279,7 +318,7 @@ def plot_mlp_feature_counts(
     scores: Union[float, Dict[int, float]],
     layers: List[int],
     token_position_ids: List[str],
-    n_features: int,
+    n_features: NFeatures,
     title: Optional[str] = None,
     save_path: Optional[str] = None,
 ) -> None:
@@ -298,6 +337,7 @@ def plot_mlp_feature_counts(
         layers: List of layer indices.
         token_position_ids: List of token position IDs (x-axis).
         n_features: Total number of features per MLP (hidden_size).
+            Can be int (same for all) or Dict[str, int] (per-unit).
         title: Optional custom title.
         save_path: Optional path to save figure.
     """
@@ -334,7 +374,7 @@ def plot_feature_counts(
         Dict[str, Optional[List[int]]], Dict[int, Dict[str, Optional[List[int]]]]
     ],
     scores: Union[float, Dict[int, float]],
-    n_features: int,
+    n_features: NFeatures,
     title: Optional[str] = None,
     save_path: Optional[str] = None,
 ) -> None:
@@ -354,7 +394,9 @@ def plot_feature_counts(
         scores: Either:
             - float for single overall accuracy
             - Dict[int, float] for per-layer accuracies
-        n_features: Total number of features per unit
+        n_features: Total number of features per unit. Can be:
+            - int: Same number of features for all units
+            - Dict[str, int]: Per-unit n_features keyed by unit_id
         title: Optional custom title.
         save_path: Optional path to save figure.
     """

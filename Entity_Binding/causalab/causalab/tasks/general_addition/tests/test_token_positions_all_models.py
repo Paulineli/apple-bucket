@@ -1,4 +1,7 @@
 """
+DEPRECATED: This task is outdated and may not reflect current best practices.
+See causalab/tasks/MCQA/ for an up-to-date example.
+
 Test token positions across all three models.
 
 This script tests token position functions with Llama, Gemma, and OLMo
@@ -37,7 +40,7 @@ def check_model_quick(model_name: str):
 
     # Generate sample
     input_sample = sample_valid_addition_input(config, 2, 2)
-    output = causal_model.run_forward(input_sample)
+    output = causal_model.new_trace(input_sample)
     print(f"\nPrompt: {output['raw_input']}")
     print(f"Answer: {output['raw_output']}")
 

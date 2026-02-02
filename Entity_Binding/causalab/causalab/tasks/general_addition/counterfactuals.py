@@ -1,4 +1,7 @@
 """
+DEPRECATED: This task is outdated and may not reflect current best practices.
+See causalab/tasks/MCQA/ for an up-to-date example.
+
 Counterfactual dataset generation for addition tasks.
 
 This module provides functions to generate counterfactual examples
@@ -32,12 +35,10 @@ def random_counterfactual(config: AdditionTaskConfig, num_addends: int, num_digi
 
     # Sample two independent inputs and generate raw_input only
     input_sample = sample_valid_addition_input(config, num_addends, num_digits)
-    model.new_raw_input(input_sample)
 
     counterfactual = sample_valid_addition_input(config, num_addends, num_digits)
-    model.new_raw_input(counterfactual)
 
-    return {"input": input_sample, "counterfactual_inputs": [counterfactual]}
+    return {"input": input_sample.to_dict() if hasattr(input_sample, "to_dict") else input_sample, "counterfactual_inputs": [counterfactual]}
 
 
 def sum_to_nine_counterfactual(config: AdditionTaskConfig, digit_position: int) -> Dict[str, Any]:
@@ -62,13 +63,11 @@ def sum_to_nine_counterfactual(config: AdditionTaskConfig, digit_position: int) 
 
     # Input: digits at digit_position sum to 9
     input_sample = sample_sum_to_nine_input(config, digit_position)
-    model.new_raw_input(input_sample)
 
     # Counterfactual: completely random
     num_digits = config.max_digits
     counterfactual = sample_valid_addition_input(config, 2, num_digits)
-    model.new_raw_input(counterfactual)
 
-    return {"input": input_sample, "counterfactual_inputs": [counterfactual]}
+    return {"input": input_sample.to_dict() if hasattr(input_sample, "to_dict") else input_sample, "counterfactual_inputs": [counterfactual]}
 
 

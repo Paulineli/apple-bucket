@@ -1,1 +1,1 @@
-# Entity Binding Task Implementation
+"""Entity Binding Task Implementation."""

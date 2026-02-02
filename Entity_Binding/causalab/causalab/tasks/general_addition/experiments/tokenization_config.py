@@ -1,4 +1,7 @@
 """
+DEPRECATED: This task is outdated and may not reflect current best practices.
+See causalab/tasks/MCQA/ for an up-to-date example.
+
 Tokenization configuration for different models.
 
 This module provides lookup tables for how many tokens each model uses

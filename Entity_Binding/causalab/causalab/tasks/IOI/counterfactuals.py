@@ -1,4 +1,8 @@
-"""Counterfactual dataset generators for the IOI task.
+"""
+DEPRECATED: This task is outdated and may not reflect current best practices.
+See causalab/tasks/MCQA/ for an up-to-date example.
+
+Counterfactual dataset generators for the IOI task.
 
 This module provides functions to generate counterfactual pairs for testing
 different causal hypotheses about the IOI (Indirect Object Identification) task.
@@ -20,8 +24,7 @@ def sample_well_formed_input():
     # Set name_C to match either name_A or name_B
     input_sample["name_C"] = random.choice([input_sample["name_A"], input_sample["name_B"]])
 
-    # Generate the raw_input
-    input_sample["raw_input"] = model.run_forward(input_sample)["raw_input"]
+    # input_sample is already a CausalTrace with computed values including raw_input
     return input_sample
 
 
@@ -31,14 +34,13 @@ def swap_names():
     """
     model = positional_causal_model
     input_sample = sample_well_formed_input()
-    counterfactual = {k: v for k, v in input_sample.items() if k != "raw_input"}
 
-    # Swap name_A and name_B
-    counterfactual["name_A"] = input_sample["name_B"]
-    counterfactual["name_B"] = input_sample["name_A"]
-
-    # name_C stays the same, so output_token will change
-    counterfactual["raw_input"] = model.run_forward(counterfactual)["raw_input"]
+    # Create counterfactual with swapped names
+    counterfactual = model.new_trace({
+        "name_A": input_sample["name_B"],
+        "name_B": input_sample["name_A"],
+        "name_C": input_sample["name_C"],
+    })
 
     return {"input": input_sample, "counterfactual_inputs": [counterfactual]}
 
@@ -49,15 +51,18 @@ def flip_name_C():
     """
     model = positional_causal_model
     input_sample = sample_well_formed_input()
-    counterfactual = {k: v for k, v in input_sample.items() if k != "raw_input"}
 
     # Flip name_C to the other name
     if input_sample["name_C"] == input_sample["name_A"]:
-        counterfactual["name_C"] = input_sample["name_B"]
+        new_name_C = input_sample["name_B"]
     else:
-        counterfactual["name_C"] = input_sample["name_A"]
+        new_name_C = input_sample["name_A"]
 
-    counterfactual["raw_input"] = model.run_forward(counterfactual)["raw_input"]
+    counterfactual = model.new_trace({
+        "name_A": input_sample["name_A"],
+        "name_B": input_sample["name_B"],
+        "name_C": new_name_C,
+    })
 
     return {"input": input_sample, "counterfactual_inputs": [counterfactual]}
 
@@ -68,17 +73,22 @@ def flip_name_C_sample_new_IO():
     """
     model = positional_causal_model
     input_sample = sample_well_formed_input()
-    counterfactual = {k: v for k, v in input_sample.items() if k != "raw_input"}
 
-    # Flip name_C to the other name
+    # Flip name_C to the other name and sample a new IO name
     if input_sample["name_C"] == input_sample["name_A"]:
-        counterfactual["name_C"] = input_sample["name_B"]
-        counterfactual["name_A"] = random.choice([n for n in NAMES if n != counterfactual["name_C"] and n != input_sample["name_A"]])
+        new_name_C = input_sample["name_B"]
+        new_name_A = random.choice([n for n in NAMES if n != new_name_C and n != input_sample["name_A"]])
+        new_name_B = input_sample["name_B"]
     else:
-        counterfactual["name_C"] = input_sample["name_A"]
-        counterfactual["name_B"] = random.choice([n for n in NAMES if n != counterfactual["name_C"] and n != input_sample["name_B"]])
+        new_name_C = input_sample["name_A"]
+        new_name_A = input_sample["name_A"]
+        new_name_B = random.choice([n for n in NAMES if n != new_name_C and n != input_sample["name_B"]])
 
-    counterfactual["raw_input"] = model.run_forward(counterfactual)["raw_input"]
+    counterfactual = model.new_trace({
+        "name_A": new_name_A,
+        "name_B": new_name_B,
+        "name_C": new_name_C,
+    })
 
     return {"input": input_sample, "counterfactual_inputs": [counterfactual]}
 
@@ -89,19 +99,18 @@ def swap_names_and_flip_C():
     """
     model = positional_causal_model
     input_sample = sample_well_formed_input()
-    counterfactual = {k: v for k, v in input_sample.items() if k != "raw_input"}
 
-    # Swap name_A and name_B
-    counterfactual["name_A"] = input_sample["name_B"]
-    counterfactual["name_B"] = input_sample["name_A"]
-
-    # Flip name_C to the other name (but in the swapped coordinate system)
+    # Flip name_C to the other name (in original coordinate system)
     if input_sample["name_C"] == input_sample["name_A"]:
-        counterfactual["name_C"] = input_sample["name_B"]
+        new_name_C = input_sample["name_B"]
     else:
-        counterfactual["name_C"] = input_sample["name_A"]
+        new_name_C = input_sample["name_A"]
 
-    counterfactual["raw_input"] = model.run_forward(counterfactual)["raw_input"]
+    counterfactual = model.new_trace({
+        "name_A": input_sample["name_B"],
+        "name_B": input_sample["name_A"],
+        "name_C": new_name_C,
+    })
 
     return {"input": input_sample, "counterfactual_inputs": [counterfactual]}
 
@@ -143,15 +152,11 @@ def random_ABC():
     input_sample = sample_well_formed_input()
 
     # Counterfactual: three distinct random names
-    counterfactual = {k: v for k, v in input_sample.items() if k != "raw_input"}
-
-    # Sample three distinct names
     cf_name_A, cf_name_B, cf_name_C = sample_three_random_distinct_names()
-    counterfactual["name_A"] = cf_name_A
-    counterfactual["name_B"] = cf_name_B
-    counterfactual["name_C"] = cf_name_C
-
-    # Generate the raw_input for the counterfactual
-    counterfactual["raw_input"] = model.run_forward(counterfactual)["raw_input"]
+    counterfactual = model.new_trace({
+        "name_A": cf_name_A,
+        "name_B": cf_name_B,
+        "name_C": cf_name_C,
+    })
 
     return {"input": input_sample, "counterfactual_inputs": [counterfactual]}

@@ -635,6 +635,105 @@ def select_candidates(node, candidates, causal_model,dataset_generator, weights)
 
         # TBD 
 
+def convert_to_binary_features(features_list, variable_names=['t0', 't1', 't2', 't3']):
+    """
+    Convert true/false string features (t0-t3) to binary features.
+    
+    Args:
+        features_list: List of dicts with true/false string values for t0-t3
+        variable_names: List of variable names to convert
+        
+    Returns:
+        List of dicts with binary features, and None for mapping (not needed for true/false)
+    """
+    binary_features_list = []
+    for features in features_list:
+        binary_features = {}
+        for var in variable_names:
+            if var in features:
+                value = str(features[var]).lower()
+                # Convert true/false strings to binary: 1 for true, 0 for false
+                binary_features[var] = 1 if value == 'true' else 0
+        binary_features_list.append(binary_features)
+    
+    return binary_features_list, None
+
+def extract_first_layer_activations(model, dataset, device, tokenizer, batch_size=64):
+    """
+    Extract activations from the first layer (layer 0) at the last token position.
+    Extracts activations from both base input (input_ids) and source input (source_input_ids).
+    
+    Args:
+        model: The language model
+        dataset: Dataset containing input_ids and source_input_ids
+        device: Device to run on
+        tokenizer: Tokenizer to get pad_token_id
+        batch_size: Batch size for processing
+        
+    Returns:
+        Tuple of (base_activations_list, source_activations_list), each containing
+        activation tensors (one per sample), each of shape (hidden_size,)
+    """
+    base_activations_list = []
+    source_activations_list = []
+    model.eval()
+    
+    with torch.no_grad():
+        data_loader = DataLoader(
+            dataset,
+            batch_size=batch_size,
+            shuffle=False,
+        )
+        
+        for batch in tqdm(data_loader, desc="Extracting activations", leave=False):
+            batch["input_ids"] = batch["input_ids"].squeeze(1).squeeze(1)
+            batch["source_input_ids"] = batch["source_input_ids"].squeeze(1).squeeze(1)
+            current_batch_size = batch["input_ids"].shape[0]
+            
+            # Move to device
+            input_ids = batch["input_ids"].to(device)
+            source_input_ids = batch["source_input_ids"].to(device)
+            
+            # Get the last token position for each sample in the batch
+            # Find the last non-padding token position
+            pad_token_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id
+            if pad_token_id is None:
+                # If no pad token, use sequence length - 1
+                seq_lengths = torch.tensor([input_ids.shape[1] - 1] * current_batch_size)
+                source_seq_lengths = torch.tensor([source_input_ids.shape[1] - 1] * current_batch_size)
+            else:
+                # Find last non-padding position
+                mask = (input_ids != pad_token_id).long()
+                seq_lengths = mask.sum(dim=1) - 1  # -1 for 0-indexed
+                source_mask = (source_input_ids != pad_token_id).long()
+                source_seq_lengths = source_mask.sum(dim=1) - 1  # -1 for 0-indexed
+            last_positions = seq_lengths.tolist()
+            source_last_positions = source_seq_lengths.tolist()
+            
+            # Run model forward pass to get hidden states for base input
+            outputs = model(input_ids, output_hidden_states=True)
+            hidden_states = outputs.hidden_states  # Tuple of (batch_size, seq_len, hidden_size)
+            
+            # Extract activations from layer 0 (first layer) at last token position for base input
+            layer_0_hidden = hidden_states[0]  # Shape: (batch_size, seq_len, hidden_size)
+            
+            for i, last_pos in enumerate(last_positions):
+                activation = layer_0_hidden[i, last_pos, :].cpu()  # Shape: (hidden_size,)
+                base_activations_list.append(activation)
+            
+            # Run model forward pass to get hidden states for source input
+            source_outputs = model(source_input_ids, output_hidden_states=True)
+            source_hidden_states = source_outputs.hidden_states  # Tuple of (batch_size, seq_len, hidden_size)
+            
+            # Extract activations from layer 0 (first layer) at last token position for source input
+            source_layer_0_hidden = source_hidden_states[0]  # Shape: (batch_size, seq_len, hidden_size)
+            
+            for i, source_last_pos in enumerate(source_last_positions):
+                source_activation = source_layer_0_hidden[i, source_last_pos, :].cpu()  # Shape: (hidden_size,)
+                source_activations_list.append(source_activation)
+    
+    return base_activations_list, source_activations_list
+
 def test_with_weights(model, layer, device, pos, test_dataset, batch_size=64, intervention_type = 'das', weight = None, subspace_dimension=1, return_details=False):
     ''' This function is used to test the model with pre-trained intervention weights.
     Input:
@@ -691,6 +790,8 @@ if __name__ == "__main__":
     parser.add_argument("--layer-end", type=int, default=None, help="Ending layer index (exclusive) for parallel layer search")
     parser.add_argument("--pos-start", type=int, default=None, help="Starting position index (inclusive) for intervention search (overrides auto-detection)")
     parser.add_argument("--pos-end", type=int, default=None, help="Ending position index (exclusive) for intervention search (overrides auto-detection)")
+    parser.add_argument("--test-layer", type=int, default=None, help="Specific layer to test (for test mode only, overrides all candidates)")
+    parser.add_argument("--test-pos", type=int, default=None, help="Specific position to test (for test mode only, overrides all candidates)")
     args = parser.parse_args()
 
     # Set random seed early for reproducibility
@@ -710,7 +811,8 @@ if __name__ == "__main__":
         args.model_id, 
         hf_token=os.environ.get("HF_TOKEN"), 
         local_dir=args.local_model_dir,
-        num_gpus=args.num_gpus
+        num_gpus=args.num_gpus,
+        gpu_id=args.device
     )
     
     # Determine device for tensors - get from model's input embeddings for multi-GPU compatibility
@@ -753,7 +855,7 @@ if __name__ == "__main__":
         print(f"Processing all {num_layers} layers")
 
     if args.causal_model == "1":
-        op_list = ["op1", "op2", "op3", "op4", "op5"]
+        op_list = ["op2"] #["op1", "op2", "op3", "op4", "op5"]
         data_generator = "all"
         out_op = "op5"
     elif args.causal_model == "2":
@@ -921,9 +1023,9 @@ if __name__ == "__main__":
         
         elif args.intervention_type == 'boundless':
             if not args.weights_path:
-                args.weights_path = f"training_results/das_weights_boundless_{causal_model_tag}_pretrain.pt"
+                args.weights_path = f"result_op2/L20_P368_extracted.pt"
             if not args.candidates_path:
-                args.candidates_path = f"training_results/candidates_boundless_{causal_model_tag}_pretrain.json"
+                args.candidates_path = f"result_op2/candidates_high.json"
 
             # load provided artifacts
             das_weights = load_weight(args.weights_path)
@@ -958,151 +1060,180 @@ if __name__ == "__main__":
             data_generator = "exhaustive2"
 
         for intervention in op_list:
-            types = util_data.corresponding_intervention(intervention)
+            # types = util_data.corresponding_intervention(intervention)
             test_results[intervention] = {}
             analysis_datasets[intervention] = {}
-            for source_code, base_code in types:
-                print(f"Creating dataset for {intervention}, source: {source_code}, base: {base_code}")
-                # Get both tokenized and raw dataset (with t0-t3 features)
-                dataset, raw_dataset = util_data.make_counterfactual_dataset(
-                    data_generator,
-                    intervention,
-                    out_op,
-                    or_causal_model,
-                    model,
-                    tokenizer,
-                    data_size,
-                    device,
-                    batch_size=batch_size,
-                    source_code=source_code,
-                    base_code=base_code,
-                    return_raw=True,
-                )
-                print(f"Dataset created for {intervention}, source: {source_code}, base: {base_code}\r")
+            # for source_code, base_code in types:
+            print(f"Creating dataset for {intervention}")
+            # Get both tokenized and raw dataset (with t0-t3 features)
+            dataset, raw_dataset = util_data.make_counterfactual_dataset(
+                data_generator,
+                intervention,
+                out_op,
+                or_causal_model,
+                model,
+                tokenizer,
+                data_size,
+                device,
+                batch_size=batch_size,
+                # source_code=source_code,
+                # base_code=base_code,
+                return_raw=True,
+            )
+            print(f"Dataset created for {intervention}\r")
 
-                # Add idx field to each sample in dataset for proper tracking
-                for i, sample in enumerate(dataset):
-                    sample["idx"] = i
+            # Add idx field to each sample in dataset for proper tracking
+            for i, sample in enumerate(dataset):
+                sample["idx"] = i
 
-                # Extract t0-t3 features from raw dataset
-                # For causal_model 1: t0, t1, t2, t3 are strings
-                # For causal_model 2: t0-t5 are from vocab (strings)
-                features_list = []
-                for dp in raw_dataset:
-                    input_ids = dp["input_ids"]
-                    if args.causal_model == "1":
-                        # For causal model 1, t0-t3 are string values
-                        features = {
-                            "t0": str(input_ids["t0"]),
-                            "t1": str(input_ids["t1"]),
-                            "t2": str(input_ids["t2"]),
-                            "t3": str(input_ids["t3"]),
-                        }
-                    else:
-                        # For causal model 2, t0-t5 are strings (from vocab)
-                        features = {
-                            "t0": str(input_ids["t0"]),
-                            "t1": str(input_ids["t1"]),
-                            "t2": str(input_ids["t2"]),
-                            "t3": str(input_ids["t3"]),
-                            "t4": str(input_ids.get("t4", "")),
-                            "t5": str(input_ids.get("t5", "")),
-                        }
-                    features_list.append(features)
-
-                # get the candidates for this intervention
-                if candidates_total is None and intervention_type == 'vanilla':
-                    # Auto-generate all layer/pos combinations for vanilla
-                    # First, get pos range from the dataset (same logic as training mode)
-                    pos_after_sub_token, input_length = find_positional_indices(
-                        sample_input_id=dataset[0]["input_ids"],
-                        tokenizer=tokenizer,
-                        sub_token='logic_function('
-                    )
-                    if args.pos_start is not None and args.pos_end is not None:
-                        poss = range(args.pos_start, args.pos_end)
-                    else:
-                        poss = range(pos_after_sub_token+7, input_length)
-                    
-                    # Generate all layer/pos combinations
-                    candidates = {f"L{layer}_P{pos}": 0.0 for layer in layers for pos in poss}
-                    print(f"Auto-generated {len(candidates)} layer/pos combinations for vanilla testing")
+            # Extract t0-t3 features from raw dataset
+            # For causal_model 1: t0, t1, t2, t3 are strings
+            # For causal_model 2: t0-t5 are from vocab (strings)
+            features_list = []
+            for dp in raw_dataset:
+                input_ids = dp["input_ids"]
+                source_input_ids = dp["source_input_ids"][0]
+                if args.causal_model == "1":
+                    # For causal model 1, t0-t3 are string values
+                    features = {
+                        "p": int(input_ids["t0"] == input_ids["t1"]),
+                        "q": int(input_ids["t2"] == input_ids["t3"]),
+                        "r": int(input_ids["t0"] == input_ids["t3"]),
+                        "ps": int(source_input_ids["t0"] == source_input_ids["t1"]),
+                        "qs": int(source_input_ids["t2"] == source_input_ids["t3"]),
+                        "rs": int(source_input_ids["t0"] == source_input_ids["t3"]),
+                    }
                 else:
-                    candidates = candidates_total.get(intervention, {})
-                weights_for_intervention = das_weights.get(intervention, {}) if isinstance(das_weights, dict) else das_weights
+                    raise ValueError(f"Unsupported causal model for now: {args.causal_model}")
+                features_list.append(features)
 
-                results = {}
-                source_base_key = "s" + source_code + "_b" + base_code
-                analysis_datasets[intervention][source_base_key] = {}
+            # Convert t0-t3 to binary features
+            # binary_features_list, value_mapping = convert_to_binary_features(features_list)
+            binary_features_list = features_list
+            # Extract activations from first layer on last token for both base and source inputs
+            print(f"Extracting activations from first layer for {intervention}")
+            base_activation_list, source_activation_list = extract_first_layer_activations(model, dataset, device, tokenizer, batch_size=batch_size)
+            
+            # Verify that activation lists match binary features list
+            if len(base_activation_list) != len(binary_features_list):
+                raise ValueError(f"Mismatch: {len(base_activation_list)} base activations but {len(binary_features_list)} feature samples")
+            if len(source_activation_list) != len(binary_features_list):
+                 raise ValueError(f"Mismatch: {len(source_activation_list)} source activations but {len(binary_features_list)} feature samples")
+            
+            # Add activation features to binary features (both base and source)
+            for i, (binary_features, base_activation, source_activation) in enumerate(zip(binary_features_list, base_activation_list, source_activation_list)):
+                # Convert activation tensors to lists for JSON serialization
+                binary_features["activation_base"] = base_activation.tolist()
+                binary_features["activation_source"] = source_activation.tolist()
+
+            # get the candidates for this intervention
+            if candidates_total is None and intervention_type == 'vanilla':
+                # Auto-generate all layer/pos combinations for vanilla
+                # First, get pos range from the dataset (same logic as training mode)
+                pos_after_sub_token, input_length = find_positional_indices(
+                    sample_input_id=dataset[0]["input_ids"],
+                    tokenizer=tokenizer,
+                    sub_token='logic_function('
+                )
+                if args.pos_start is not None and args.pos_end is not None:
+                    poss = range(args.pos_start, args.pos_end)
+                else:
+                    poss = range(pos_after_sub_token+7, input_length)
                 
+                # Generate all layer/pos combinations
+                candidates = {f"L{layer}_P{pos}": 0.0 for layer in layers for pos in poss}
+                print(f"Auto-generated {len(candidates)} layer/pos combinations for vanilla testing")
+            else:
+                candidates = candidates_total.get(intervention, {})
+            weights_for_intervention = das_weights.get(intervention, {}) if isinstance(das_weights, dict) else das_weights
+
+            # Filter candidates by layer and position if specified
+            if args.test_layer is not None or args.test_pos is not None:
+                filtered_candidates = {}
                 for candidate in candidates.keys():
                     layer, pos = extract_layer_pos(candidate)
-                    weight = weights_for_intervention.get(candidate)
-                    # Skip weight check for vanilla intervention (it doesn't use weights)
-                    if weight is None and intervention_type not in ['vanilla']:
-                        print(f"Warning: weight for candidate {candidate} not found; skipping")
-                        continue
-                    
-                    # Get accuracy and detailed per-sample results
-                    if intervention_type == 'boundless':
-                        acc, details = test_with_boundless_weights(
-                            model,
-                            layer,
-                            device,
-                            pos,
-                            dataset,
-                            batch_size=batch_size,
-                            weight=weight,
-                            return_details=True
-                        )
-                    elif intervention_type == 'vanilla':
-                        acc, details = test_with_weights(
-                            model,
-                            layer,
-                            device,
-                            pos,
-                            dataset,
-                            batch_size=batch_size,
-                            intervention_type='vanilla',
-                            weight=None,  # Vanilla doesn't use weights
-                            return_details=True
-                        )
-                    else:
-                        acc, details = test_with_weights(
-                            model,
-                            layer,
-                            device,
-                            pos,
-                            dataset,
-                            batch_size=batch_size,
-                            intervention_type=intervention_type,
-                            weight=weight,
-                            subspace_dimension=args.subspace_dimension,
-                            return_details=True
-                        )
-                    print(f"Source: {source_code}, Base: {base_code}, Candidate: {candidate}, Accuracy: {acc:.4f} \r")
-                    results[candidate] = acc
-                    
-                    # Create analysis dataset for this (pos, layer) combination
-                    # Features: t0, t1, t2, t3 (and t4, t5 for causal model 2)
-                    # Label: binary (1 if eval_labels == pred_label, 0 otherwise)
-                    # Use indices from details to align features with results
-                    aligned_features = [features_list[i] for i in details["indices"]]
-                    analysis_datasets[intervention][source_base_key][candidate] = {
-                        "features": aligned_features,
-                        "labels": details["correct"],  # Binary: 1 if correct, 0 otherwise
-                        "layer": layer,
-                        "pos": pos,
-                        "accuracy": acc
-                    }
+                    # Check if this candidate matches the specified layer and/or position
+                    layer_match = (args.test_layer is None) or (layer == args.test_layer)
+                    pos_match = (args.test_pos is None) or (pos == args.test_pos)
+                    if layer_match and pos_match:
+                        filtered_candidates[candidate] = candidates[candidate]
+                candidates = filtered_candidates
+                if len(candidates) == 0:
+                    print(f"Warning: No candidates found matching layer={args.test_layer}, pos={args.test_pos}")
+                    continue
+                else:
+                    print(f"Filtered to {len(candidates)} candidate(s) matching layer={args.test_layer}, pos={args.test_pos}")
 
-                test_results[intervention][source_base_key] = results
+            results = {}
+            
+            for candidate in candidates.keys():
+                layer, pos = extract_layer_pos(candidate)
+                weight = weights_for_intervention.get(candidate)
+                # Skip weight check for vanilla intervention (it doesn't use weights)
+                if weight is None and intervention_type not in ['vanilla']:
+                    print(f"Warning: weight for candidate {candidate} not found; skipping")
+                    continue
+                
+                # Get accuracy and detailed per-sample results
+                if intervention_type == 'boundless':
+                    acc, details = test_with_boundless_weights(
+                        model,
+                        layer,
+                        device,
+                        pos,
+                        dataset,
+                        batch_size=batch_size,
+                        weight=weight,
+                        return_details=True
+                    )
+                elif intervention_type == 'vanilla':
+                    acc, details = test_with_weights(
+                        model,
+                        layer,
+                        device,
+                        pos,
+                        dataset,
+                        batch_size=batch_size,
+                        intervention_type='vanilla',
+                        weight=None,  # Vanilla doesn't use weights
+                        return_details=True
+                    )
+                else:
+                    acc, details = test_with_weights(
+                        model,
+                        layer,
+                        device,
+                        pos,
+                        dataset,
+                        batch_size=batch_size,
+                        intervention_type=intervention_type,
+                        weight=weight,
+                        subspace_dimension=args.subspace_dimension,
+                        return_details=True
+                    )
+                print(f"Candidate: {candidate}, Accuracy: {acc:.4f} \r")
+                results[candidate] = acc
+                
+                # Create analysis dataset for this (pos, layer) combination
+                # Features: binary features for t0-t3 + activations from first layer (both base and source inputs)
+                # Label: binary (1 if eval_labels == pred_label, 0 otherwise)
+                # Use indices from details to align features with results
+                aligned_binary_features = [binary_features_list[i] for i in details["indices"]]
+                analysis_datasets[intervention][candidate] = {
+                    "features": aligned_binary_features,
+                    "labels": details["correct"],  # Binary: 1 if correct, 0 otherwise
+                    "layer": layer,
+                    "pos": pos,
+                    "accuracy": acc
+                }
 
-                # Save partial results after each evaluation
-                os.makedirs("test_results", exist_ok=True)
-                with open(f"test_results/test_results_partial_{intervention_type}_{causal_model_tag}.json", "w") as f:
-                    json.dump(test_results, f, indent=4)
-                print(f"Partial test results saved after {intervention}")
+            test_results[intervention] = results
+
+            # Save partial results after each evaluation
+            os.makedirs("test_results", exist_ok=True)
+            with open(f"test_results/test_results_partial_{intervention_type}_{causal_model_tag}.json", "w") as f:
+                json.dump(test_results, f, indent=4)
+            print(f"Partial test results saved after {intervention}")
 
         # Save final test results
         if intervention_type == 'boundless':

@@ -212,7 +212,8 @@ def extract_grid_dimensions(
         return {"layers": sorted(layers), "heads": sorted(heads)}
     else:
         # residual_stream or mlp
-        layers, positions = set(), set()
+        layers_set: set[int] = set()
+        positions_ordered: List[str] = []  # Preserve insertion order
         component_marker = (
             "ResidualStream" if component_type == "residual_stream" else "MLP"
         )
@@ -222,8 +223,9 @@ def extract_grid_dimensions(
             try:
                 layer = extract_layer_from_unit_id(unit_id)
                 position = extract_token_position_from_unit_id(unit_id)
-                layers.add(layer)
-                positions.add(position)
+                layers_set.add(layer)
+                if position not in positions_ordered:
+                    positions_ordered.append(position)
             except ValueError:
                 continue
-        return {"layers": sorted(layers), "token_position_ids": sorted(positions)}
+        return {"layers": sorted(layers_set), "token_position_ids": positions_ordered}

@@ -1,0 +1,36 @@
+{
+  "task": "filling_liquids",
+  "num_groups": 6,
+  "model": "google/gemma-2-2b-it",
+  "layer": 15,
+  "classifier_path": "partition_results/SAE_Gemma2_results/sae_classifier_15_6.pkl",
+  "classifier_metadata": {
+    "top_feature_indices": [
+      2460,
+      857,
+      4311,
+      15046,
+      14182,
+      3820,
+      6518,
+      14066,
+      6275,
+      4345
+    ],
+    "cluster_0_id": 0,
+    "cluster_1_id": 1,
+    "n_features": 10
+  },
+  "initial_sample_size": 150,
+  "after_model_filtering": 148,
+  "after_classifier_filtering_kept": 73,
+  "after_classifier_filtering_filtered_out": 75,
+  "cluster_kept": 0,
+  "cluster_filtered": 1,
+  "iia_kept_cluster": 0.8394216133942162,
+  "iia_filtered_out_cluster": 0.3073873873873874,
+  "prediction_distribution": {
+    "0": 73,
+    "1": 75
+  }
+}

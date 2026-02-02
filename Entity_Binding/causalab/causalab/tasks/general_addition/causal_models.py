@@ -1,4 +1,7 @@
 """
+DEPRECATED: This task is outdated and may not reflect current best practices.
+See causalab/tasks/MCQA/ for an up-to-date example.
+
 Causal models for general addition tasks.
 
 This module defines two causal models:
@@ -124,35 +127,27 @@ def create_basic_addition_model(config: AdditionTaskConfig) -> CausalModel:
     for k in range(K):
         for d in range(D):
             key = f"digit_{k}_{d}"
-            mechanisms[key] = lambda: random.randint(0, 9)
+            mechanisms[key] = lambda t: random.randint(0, 9)
 
     # Control mechanisms
-    mechanisms.update(
-        {
-            "num_addends": lambda: random.randint(1, K),
-            "num_digits": lambda: random.randint(1, D),
-            "template": lambda: random.choice(config.templates),
-        }
-    )
+    mechanisms.update({
+        "num_addends": lambda t: random.randint(1, K),
+        "num_digits": lambda t: random.randint(1, D),
+        "template": lambda t: random.choice(config.templates),
+    })
 
     # Output computation mechanism
-    def compute_output_digits(*args):
+    def compute_output_digits(trace):
         """Compute all output digits from input digits."""
-        # Parse arguments: first K*D are input digits, then controls
-        input_digits = args[: K * D]
-        num_addends = args[K * D]
-        num_digits = args[K * D + 1]
+        num_addends = trace["num_addends"]
+        num_digits = trace["num_digits"]
 
         # Extract numbers
         numbers = []
         for k in range(num_addends):
             digits = []
             for d in range(num_digits):
-                idx = k * D + d
-                if idx < len(input_digits):
-                    digits.append(input_digits[idx])
-                else:
-                    digits.append(0)
+                digits.append(trace[f"digit_{k}_{d}"])
             numbers.append(digits)
 
         # Compute sum
@@ -165,8 +160,8 @@ def create_basic_addition_model(config: AdditionTaskConfig) -> CausalModel:
     for d in range(D + 1):
 
         def make_output_digit_mechanism(digit_idx):
-            def mechanism(*args):
-                output_digits = compute_output_digits(*args)
+            def mechanism(trace):
+                output_digits = compute_output_digits(trace)
                 if digit_idx < len(output_digits):
                     return output_digits[digit_idx]
                 return 0
@@ -176,20 +171,17 @@ def create_basic_addition_model(config: AdditionTaskConfig) -> CausalModel:
         mechanisms[f"output_digit_{d}"] = make_output_digit_mechanism(d)
 
     # raw_input generation mechanism
-    def generate_raw_input(*args):
+    def generate_raw_input(trace):
         """Generate the complete prompt text."""
-        # Parse arguments
-        input_digits = args[: K * D]
-        num_addends = args[K * D]
-        num_digits = args[K * D + 1]
-        template = args[K * D + 2]
+        num_addends = trace["num_addends"]
+        num_digits = trace["num_digits"]
+        template = trace["template"]
 
         # Build digit dictionary
         digit_dict = {}
         for k in range(K):
             for d in range(D):
-                idx = k * D + d
-                digit_dict[f"digit_{k}_{d}"] = input_digits[idx]
+                digit_dict[f"digit_{k}_{d}"] = trace[f"digit_{k}_{d}"]
 
         # Generate prompt
         processor = AdditionTemplateProcessor(config)
@@ -198,9 +190,9 @@ def create_basic_addition_model(config: AdditionTaskConfig) -> CausalModel:
     mechanisms["raw_input"] = generate_raw_input
 
     # raw_output generation mechanism
-    def generate_raw_output(*args):
+    def generate_raw_output(trace):
         """Generate the expected output text."""
-        output_digits = list(args)
+        output_digits = [trace[f"output_digit_{d}"] for d in range(D + 1)]
         processor = AdditionTemplateProcessor(config)
         return " " + processor.format_output(output_digits)
 
@@ -357,72 +349,77 @@ def create_intermediate_addition_model(config: AdditionTaskConfig) -> CausalMode
     for k in range(K):
         for d in range(D):
             key = f"digit_{k}_{d}"
-            mechanisms[key] = lambda: random.randint(0, 9)
+            mechanisms[key] = lambda t: random.randint(0, 9)
 
     # Control mechanisms
-    mechanisms.update(
-        {
-            "num_digits": lambda: random.randint(1, D),
-            "template": lambda: random.choice(config.templates),
-        }
-    )
+    mechanisms.update({
+        "num_digits": lambda t: random.randint(1, D),
+        "template": lambda t: random.choice(config.templates),
+    })
 
     # Carry mechanisms
     for i in range(1, D + 1):
+        d = D - i  # Convert right-indexed position to left-indexed digit
         if i == 1:
             # C_1 = 1 if (digit_0 + digit_1) >= 10, else 0
-            def mechanism(digit_0, digit_1):
+            def mechanism(trace, d=d):
+                digit_0 = trace[f"digit_0_{d}"]
+                digit_1 = trace[f"digit_1_{d}"]
                 return 1 if (digit_0 + digit_1) >= 10 else 0
 
             mechanisms[f"C_{i}"] = mechanism
         else:
             # C_i = 1 if (digit_0 + digit_1 + C_{i-1}) >= 10, else 0
-            def make_carry_mechanism(pos):
-                def mechanism(digit_0, digit_1, carry_prev):
+            def make_carry_mechanism(pos, d=d):
+                def mechanism(trace):
+                    digit_0 = trace[f"digit_0_{d}"]
+                    digit_1 = trace[f"digit_1_{d}"]
+                    carry_prev = trace[f"C_{pos-1}"]
                     return 1 if (digit_0 + digit_1 + carry_prev) >= 10 else 0
 
                 return mechanism
-
-            mechanisms[f"C_{i}"] = make_carry_mechanism(i)
+            mechanisms[f"C_{i}"] = make_carry_mechanism(i, d)
 
     # Output mechanisms
     for i in range(1, D + 2):
         if i == 1:
             # O_1 = (digit_0 + digit_1) % 10
-            def mechanism(digit_0, digit_1):
+            d = D - i
+            def mechanism(trace, d=d):
+                digit_0 = trace[f"digit_0_{d}"]
+                digit_1 = trace[f"digit_1_{d}"]
                 return (digit_0 + digit_1) % 10
 
             mechanisms[f"O_{i}"] = mechanism
         elif i <= D:
             # O_i = (digit_0 + digit_1 + C_{i-1}) % 10
-            def make_output_mechanism(pos):
-                def mechanism(digit_0, digit_1, carry_prev):
+            d = D - i
+            def make_output_mechanism(pos, d=d):
+                def mechanism(trace):
+                    digit_0 = trace[f"digit_0_{d}"]
+                    digit_1 = trace[f"digit_1_{d}"]
+                    carry_prev = trace[f"C_{pos-1}"]
                     return (digit_0 + digit_1 + carry_prev) % 10
 
                 return mechanism
-
-            mechanisms[f"O_{i}"] = make_output_mechanism(i)
+            mechanisms[f"O_{i}"] = make_output_mechanism(i, d)
         else:
             # O_{D+1} = C_D (final carry out)
-            def mechanism(carry_d):
-                return carry_d
-
+            def mechanism(trace):
+                return trace[f"C_{D}"]
             mechanisms[f"O_{i}"] = mechanism
 
     # raw_input generation mechanism
-    def generate_raw_input(*args):
+    def generate_raw_input(trace):
         """Generate the complete prompt text."""
-        # Parse arguments: K*D input digits, then num_digits, then template
-        input_digits = args[: K * D]
-        num_digits = args[K * D]
-        template = args[K * D + 1]
+        num_digits = trace["num_digits"]
+        template = trace["template"]
 
         # Build digit dictionary
         digit_dict = {}
         for k in range(K):
             for d in range(D):
-                idx = k * D + d
-                digit_dict[f"digit_{k}_{d}"] = input_digits[idx]
+                digit_dict[f"digit_{k}_{d}"] = trace[f"digit_{k}_{d}"]
 
         # Generate prompt (always 2 addends for this model)
         processor = AdditionTemplateProcessor(config)
@@ -431,13 +428,13 @@ def create_intermediate_addition_model(config: AdditionTaskConfig) -> CausalMode
     mechanisms["raw_input"] = generate_raw_input
 
     # raw_output generation mechanism
-    def generate_raw_output(*args):
+    def generate_raw_output(trace):
         """Generate the expected output text.
 
         Args are O_1, O_2, ..., O_{D+1} (1-indexed from right)
         where 1 is ones place, so we need to reverse for formatting.
         """
-        output_digits_right_to_left = list(args)
+        output_digits_right_to_left = [trace[f"O_{i}"] for i in range(1, D + 2)]
         # Reverse to get left-to-right (most significant first)
         output_digits_left_to_right = list(reversed(output_digits_right_to_left))
         processor = AdditionTemplateProcessor(config)

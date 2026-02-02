@@ -1,4 +1,7 @@
 """
+DEPRECATED: This task is outdated and may not reflect current best practices.
+See causalab/tasks/MCQA/ for an up-to-date example.
+
 Token position functions for general addition tasks.
 
 This module provides functions to locate specific tokens in addition prompts,

@@ -1,4 +1,7 @@
 """
+DEPRECATED: This task is outdated and may not reflect current best practices.
+See causalab/tasks/MCQA/ for an up-to-date example.
+
 Analyze tokenization patterns for each model and digit configuration.
 
 This script determines how many tokens each model uses for numbers

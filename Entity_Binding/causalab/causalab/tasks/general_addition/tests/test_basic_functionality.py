@@ -1,4 +1,7 @@
 """
+DEPRECATED: This task is outdated and may not reflect current best practices.
+See causalab/tasks/MCQA/ for an up-to-date example.
+
 Basic functionality tests for general addition task.
 
 This script tests the core functionality without using pytest,
@@ -105,9 +108,9 @@ def test_basic_causal_model():
     )
 
     # Run model forward to get all outputs
-    output = model.run_forward(input_sample)
-    prompt = output["raw_input"]
-    answer = output["raw_output"]
+    output = model.new_trace(input_sample)
+    prompt = output['raw_input']
+    answer = output['raw_output']
     print(f"✓ Generated prompt: '{prompt}'")
     print(f"✓ Generated answer: '{answer}'")
 
@@ -150,8 +153,8 @@ def test_intermediate_causal_model():
         "template": config.templates[0],
     }
 
-    output = model.run_forward(input_sample)
-    print("\nTest 1: 23 + 45 = 68")
+    output = model.new_trace(input_sample)
+    print(f"\nTest 1: 23 + 45 = 68")
     print(f"  C_1 = {output['C_1']} (carry from ones: 3+5=8 < 10, no carry)")
     print(f"  O_1 = {output['O_1']} (ones place: (3+5)%10 = 8)")
     print(f"  C_2 = {output['C_2']} (carry from tens: 2+4+0=6 < 10, no carry)")
@@ -179,8 +182,8 @@ def test_intermediate_causal_model():
         "template": config.templates[0],
     }
 
-    output = model.run_forward(input_sample)
-    print("\nTest 2: 27 + 48 = 75")
+    output = model.new_trace(input_sample)
+    print(f"\nTest 2: 27 + 48 = 75")
     print(f"  C_1 = {output['C_1']} (carry from ones: 7+8=15 >= 10, carry!)")
     print(f"  O_1 = {output['O_1']} (ones place: (7+8)%10 = 15%10 = 5)")
     print(f"  C_2 = {output['C_2']} (carry from tens: 2+4+1=7 < 10, no carry)")

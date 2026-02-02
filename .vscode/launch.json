@@ -56,11 +56,31 @@
             ],
             "justMyCode": false,
             "env": {
-                "PYTHONPATH": "${workspaceFolder}/Entity_Binding",
-                "PATH": "/home/jytan12/causal_abs_cs224n/causal_abs/bin:${env:PATH}",
-                "VIRTUAL_ENV": "/home/jytan12/causal_abs_cs224n/causal_abs",
-                "PYTHON": "/usr/bin/python3"
-            }
+                "PYTHONPATH": "bin/python3.8",
+            },
+        },
+        {
+            "name": "Debug test_alignment.py (Full Dataset)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/Entity_Binding/hypothesis_testing/test_alignment.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/Entity_Binding",
+            "args": [
+                "--test-size", "512",
+                "--batch-size", "16",
+                "--gpu", "1",
+                "--result-path", "hypothesis_testing/outputs/google_gemma-2-2b-it/vanilla_interchange_result.pkl",
+                "--layer", "15", // 23 for qwen3-8b, 15 fo Gemma2-2b-it, 23 for qwen3-4b-it
+                "--use-swap",
+                "--task-type", "filling_liquids",
+                "--output", "hypothesis_testing/outputs/debug_small",
+                // "--skip-filtering",
+            ],
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "bin/python3.8",
+            },
         }
     ]
 }

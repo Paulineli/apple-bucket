@@ -1,5 +1,8 @@
 #!/usr/bin/env -S uv run python
 """
+DEPRECATED: This task is outdated and may not reflect current best practices.
+See causalab/tasks/MCQA/ for an up-to-date example.
+
 Test script to determine optimal batch size for GPU memory.
 
 This script tests increasing batch sizes until we hit OOM (Out of Memory),
@@ -15,8 +18,8 @@ import gc
 from causalab.tasks.general_addition.config import create_two_number_two_digit_config
 from causalab.tasks.general_addition.counterfactuals import random_counterfactual
 from causalab.neural.pipeline import LMPipeline
-from causalab.causal.counterfactual_dataset import CounterfactualDataset
-from causalab.experiments.LM_experiments.residual_stream_experiment import PatchResidualStream
+from causalab.causal.counterfactual_dataset import CounterfactualExample
+from causalab.causal.causal_utils import generate_counterfactual_samples
 from causalab.tasks.general_addition.experiments.tokenization_config import (
     get_all_number_token_indices,
     get_tokens_per_number,
@@ -42,10 +45,9 @@ def check_batch_size(model_name, batch_size, num_examples=64):
         pipeline = LMPipeline(
             model_name, max_new_tokens=10, device=device, max_length=64
         )
-        pipeline.tokenizer.padding_side = "left"
 
         # Generate small dataset
-        dataset = CounterfactualDataset.from_sampler(
+        dataset: list[CounterfactualExample] = generate_counterfactual_samples(
             num_examples, lambda: random_counterfactual(config, 2, 2)
         )
 

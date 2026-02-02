@@ -1,5 +1,8 @@
 #!/usr/bin/env -S uv run python
 """
+DEPRECATED: This task is outdated and may not reflect current best practices.
+See causalab/tasks/MCQA/ for an up-to-date example.
+
 Step 3: Compute Scores and Generate Visualizations
 
 This script:
@@ -34,9 +37,7 @@ from causalab.tasks.general_addition.config import (
     create_general_config,
 )
 from causalab.tasks.general_addition.causal_models import create_basic_addition_model
-from causalab.causal.counterfactual_dataset import CounterfactualDataset
-from causalab.causal.causal_utils import compute_interchange_scores
-from causalab.experiments.LM_experiments.residual_stream_experiment import PatchResidualStream
+from causalab.causal.counterfactual_dataset import CounterfactualExample
 from datasets import load_from_disk
 
 
@@ -118,7 +119,7 @@ def main():
 
     print(f"Loading dataset from {dataset_path}...")
     hf_dataset = load_from_disk(dataset_path)
-    dataset = CounterfactualDataset(dataset=hf_dataset, id="random_cf")
+    dataset: list[CounterfactualExample] = list(hf_dataset)  # type: ignore[assignment]
     print(f"✓ Loaded {len(dataset)} examples")
     print()
 

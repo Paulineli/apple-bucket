@@ -15,8 +15,10 @@ Usage:
 """
 
 import sys
+import os
 
-sys.path.append("/mnt/polished-lake/home/atticus/CausalAbstraction")
+# Add the causalab package to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'causalab'))
 
 import argparse
 import torch

@@ -1,4 +1,8 @@
-"""Causal models for the IOI (Indirect Object Identification) task.
+"""
+DEPRECATED: This task is outdated and may not reflect current best practices.
+See causalab/tasks/MCQA/ for an up-to-date example.
+
+Causal models for the IOI (Indirect Object Identification) task.
 
 This module defines the causal model structure for the IOI task, including
 variables, values, parent relationships, and mechanisms.
@@ -27,8 +31,15 @@ TEMPLATES = get_data(os.path.join(IOI_DIR, 'templates.json'))
 
 
 # Causal Model Mechanisms
-def fill_template(template, name_A, name_B, name_C, place, object_name):
+def fill_template(trace):
     """Fill in the template with names, place, and object."""
+    template = trace["template"]
+    name_A = trace["name_A"]
+    name_B = trace["name_B"]
+    name_C = trace["name_C"]
+    place = trace["place"]
+    object_name = trace["object"]
+
     filled = template.replace("{name_A}", name_A)
     filled = filled.replace("{name_B}", name_B)
     filled = filled.replace("{name_C}", name_C)
@@ -38,8 +49,12 @@ def fill_template(template, name_A, name_B, name_C, place, object_name):
     return filled
 
 
-def get_output_position(name_A, name_B, name_C):
+def get_output_position(trace):
     """Determine the output position (0 for A, 1 for B)."""
+    name_A = trace["name_A"]
+    name_B = trace["name_B"]
+    name_C = trace["name_C"]
+
     if name_C == name_A:
         return 1  # Answer is B
     elif name_C == name_B:
@@ -49,8 +64,12 @@ def get_output_position(name_A, name_B, name_C):
         return None
 
 
-def get_output_token(name_A, name_B, name_C):
+def get_output_token(trace):
     """Determine the correct output token based on name_C."""
+    name_A = trace["name_A"]
+    name_B = trace["name_B"]
+    name_C = trace["name_C"]
+
     if name_C == name_A:
         return name_B
     elif name_C == name_B:
@@ -73,13 +92,18 @@ def create_ioi_causal_model(bias=2.0, token_coeff=-1.0, pos_coeff=-1.0):
         CausalModel instance for IOI task
     """
 
-    def get_logits(name_A, name_B, output_token, output_position):
+    def get_logits(trace):
         """
         Calculate logits for name_A and name_B.
 
         Returns a dictionary mapping each name to its logit value, or None if
         there is no definitive answer (output_token or output_position is None).
         """
+        name_A = trace["name_A"]
+        name_B = trace["name_B"]
+        output_token = trace["output_token"]
+        output_position = trace["output_position"]
+
         # Calculate signal for name_A
         token_signal_A = 1 if output_token == name_A else 0
         pos_signal_A = 1 if output_position == 0 else 0
@@ -92,11 +116,14 @@ def create_ioi_causal_model(bias=2.0, token_coeff=-1.0, pos_coeff=-1.0):
 
         return {name_A: logit_A, name_B: logit_B}
 
-    def get_raw_output(name_A, name_B, logits):
+    def get_raw_output(trace):
         """
         Generate the raw output as a dictionary with token and logits.
         Token is whichever name has the higher logit.
         """
+        name_A = trace["name_A"]
+        name_B = trace["name_B"]
+        logits = trace["logits"]
 
         # Pick the name with higher logit
         if logits[name_A] > logits[name_B]:
@@ -145,12 +172,12 @@ def create_ioi_causal_model(bias=2.0, token_coeff=-1.0, pos_coeff=-1.0):
     }
 
     mechanisms = {
-        "template": lambda: random.choice(TEMPLATES),
-        "name_A": lambda: random.choice(NAMES),
-        "name_B": lambda: random.choice(NAMES),
-        "name_C": lambda: random.choice(NAMES),
-        "place": lambda: random.choice(PLACES),
-        "object": lambda: random.choice(OBJECTS),
+        "template": lambda t: random.choice(TEMPLATES),
+        "name_A": lambda t: random.choice(NAMES),
+        "name_B": lambda t: random.choice(NAMES),
+        "name_C": lambda t: random.choice(NAMES),
+        "place": lambda t: random.choice(PLACES),
+        "object": lambda t: random.choice(OBJECTS),
         "raw_input": fill_template,
         "output_position": get_output_position,
         "output_token": get_output_token,

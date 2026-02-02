@@ -25,9 +25,9 @@ dependencies = [
     "dash",
     "dash-cytoscape",
     "jupyter-dash",
-    "claude-agent-sdk>=0.1.4",
     "rich",
     "nnsight>=0.5.9",
+    "ipykernel>=7.0.1",
 ]
 
 [tool.uv.sources]
@@ -38,8 +38,8 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "gpu: marks tests as requiring GPU",
 ]
-testpaths = ["tests"]
-norecursedirs = ["causalab/agents/refs", ".venv", "__pycache__"]
+testpaths = ["tests", "causalab/tasks/MCQA/tests"]
+norecursedirs = [".venv", "__pycache__"]
 
 [tool.coverage.run]
 omit = [
@@ -73,28 +73,33 @@ dev = [
     "ruff",
     "pre-commit>=4.4.0",
     "basedpyright",
+    "scikit-learn-stubs",
+    "pandas-stubs",
 ]
 
 [tool.ruff]
 # target-version inferred from project.requires-python
 exclude = [
-    "causalab/agents/refs/**",
     "**/__pycache__",
     "**/.venv",
     ".venv",
-    "causalab/tasks",
+    # Exclude all tasks except MCQA
+    "causalab/tasks/entity_binding",
+    "causalab/tasks/IOI",
+    "causalab/tasks/general_addition",
 ]
 
 [tool.basedpyright]
 pythonVersion = "3.10"
 typeCheckingMode = "strict"
 exclude = [
-    "causalab/agents/refs/**",
     "**/__pycache__",
     "**/.venv",
     ".venv",
-    "causalab/tasks",
-    "demos/**"
+    # Exclude all tasks except MCQA
+    "causalab/tasks/entity_binding",
+    "causalab/tasks/IOI",
+    "causalab/tasks/general_addition",
 ]
 # Disable cascading inference rules to avoid untyped code propagating errors
 reportUnknownVariableType = "none"

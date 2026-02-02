@@ -33,15 +33,19 @@ from .unit_id import (
     extract_grid_dimensions,
 )
 from .feature_masks import (
-    # Feature count plotting (Boundless DAS)
+    # Feature count plotting (DBM with tie_masks=False)
     plot_feature_counts,
     plot_attention_head_feature_counts,
     plot_residual_stream_feature_counts,
     plot_mlp_feature_counts,
     count_selected_features,
+    NFeatures,
 )
 from .text_analysis import (
     print_residual_stream_patching_analysis,
+)
+from .pca_scatter import (
+    plot_pca_scatter,
 )
 
 __all__ = [
@@ -70,12 +74,15 @@ __all__ = [
     "detect_component_type",
     "is_per_layer_mode",
     "extract_grid_dimensions",
-    # Feature count plotting (Boundless DAS)
+    # Feature count plotting (DBM with tie_masks=False)
     "plot_feature_counts",
     "plot_attention_head_feature_counts",
     "plot_residual_stream_feature_counts",
     "plot_mlp_feature_counts",
     "count_selected_features",
+    "NFeatures",
     # Text analysis functions
     "print_residual_stream_patching_analysis",
+    # PCA scatter plots
+    "plot_pca_scatter",
 ]

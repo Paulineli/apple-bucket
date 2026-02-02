@@ -1,5 +1,8 @@
 #!/usr/bin/env -S uv run python
 """
+DEPRECATED: This task is outdated and may not reflect current best practices.
+See causalab/tasks/MCQA/ for an up-to-date example.
+
 Step 2: Run Residual Stream Patching Experiments
 
 This script:
@@ -36,9 +39,8 @@ from causalab.tasks.general_addition.experiments.tokenization_config import (
 )
 from causalab.neural.pipeline import LMPipeline
 from causalab.neural.token_position_builder import TokenPosition, get_last_token_index
-from causalab.causal.counterfactual_dataset import CounterfactualDataset
-from causalab.experiments.LM_experiments.residual_stream_experiment import PatchResidualStream
-from datasets import load_from_disk
+from causalab.causal.counterfactual_dataset import CounterfactualExample
+from datasets import load_from_disk, Dataset
 
 
 def create_token_positions_for_experiment(pipeline, config, num_digits, model_name):
@@ -177,7 +179,7 @@ def main():
     # Load dataset
     print(f"Loading filtered dataset from {args.dataset}...")
     hf_dataset = load_from_disk(args.dataset)
-    dataset = CounterfactualDataset(dataset=hf_dataset, id="random_cf")
+    dataset: list[CounterfactualExample] = list(hf_dataset)  # type: ignore[assignment]
     print(f"✓ Loaded {len(dataset)} examples")
     print()
 
@@ -193,7 +195,6 @@ def main():
         dtype=torch.bfloat16 if device == "cuda" else torch.float32,
         max_length=16,
     )
-    pipeline.tokenizer.padding_side = "left"
     print("✓ Model loaded")
     print()
 
@@ -221,10 +222,7 @@ def main():
         layers = [0]  # Only layer 0 for quick testing
         # Take only one batch of data
         test_size = args.batch_size
-        test_hf_dataset = dataset.dataset.select(range(min(test_size, len(dataset))))
-        test_dataset = CounterfactualDataset(
-            dataset=test_hf_dataset, id="random_cf_test"
-        )
+        test_dataset = dataset[: min(test_size, len(dataset))]
         datasets_dict = {"random_cf": test_dataset}
         print(f"*** TEST MODE: layer 0 only, {len(test_dataset)} examples ***")
     else:

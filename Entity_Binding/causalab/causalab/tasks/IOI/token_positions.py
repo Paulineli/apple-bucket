@@ -1,10 +1,15 @@
-"""Token position functions for the IOI task.
+"""
+DEPRECATED: This task is outdated and may not reflect current best practices.
+See causalab/tasks/MCQA/ for an up-to-date example.
+
+Token position functions for the IOI task.
 
 This module provides functions to locate specific tokens in IOI prompts,
 such as name positions and the last token.
 """
 
 import re
+from causalab.causal.trace import CausalTrace, Mechanism
 from causalab.neural.token_position_builder import TokenPosition, get_last_token_index
 
 
@@ -68,8 +73,17 @@ def get_last_token_of_name(input_sample, pipeline, name_var):
 
     _, end_pos = occurrence_map[name_var]
 
+    # Helper to create CausalTrace from string
+    def _make_trace(text: str) -> CausalTrace:
+        return CausalTrace(
+            mechanisms={
+                "raw_input": Mechanism(parents=[], compute=lambda t: t["raw_input"])
+            },
+            inputs={"raw_input": text},
+        )
+
     # Tokenization approach similar to MCQA
-    tokenized_prompt_padded = list(pipeline.load(prompt)["input_ids"][0])
+    tokenized_prompt_padded = list(pipeline.load([_make_trace(prompt)])["input_ids"][0])
     pad_token_id = pipeline.tokenizer.pad_token_id
 
     # Find where content starts
@@ -85,7 +99,7 @@ def get_last_token_of_name(input_sample, pipeline, name_var):
     # Tokenize substring up to and including the name
     substring = prompt[:end_pos]
     tokenized_substring = list(
-        pipeline.load(substring, no_padding=True)["input_ids"][0]
+        pipeline.load([_make_trace(substring)], no_padding=True)["input_ids"][0]
     )
 
     # Find where substring ends in content

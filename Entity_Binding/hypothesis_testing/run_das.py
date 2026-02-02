@@ -6,13 +6,18 @@ This script:
 1. Creates a randomly sampled entity binding dataset with 10 groups and 3 entities
 2. Filters the dataset based on model predictions (base and counterfactual must both be correct)
 3. Checks task accuracy (must be >80%, otherwise suggests larger model)
-4. Runs boundless DAS to find alignment of positional_query_group
-5. Saves weights and IIA accuracy for all alignments tested
+4. Runs vanilla interchange interventions to find alignment of positional_query_group
+5. Saves IIA accuracy for all layers tested
 
 Usage:
     python run_das.py --model MODEL_ID [--gpu GPU_ID] [--size DATASET_SIZE]
     python run_das.py --model gpt2 --gpu 0 --size 1024
     python run_das.py --model Qwen/Qwen3-8B --hf-cache-dir /path/to/.cache --gpu 0
+    python run_das.py --model MODEL_ID --task-type filling_liquids
+
+Task types:
+    - action: Person put object in location (default)
+    - filling_liquids: Person fills container with liquid
 """
 
 import sys
@@ -29,22 +34,31 @@ import argparse
 import torch
 import json
 import pickle
+import copy
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Tuple, Callable
 
 # Add the causalab package to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'causalab'))
 
-from causalab.tasks.entity_binding.config import EntityBindingTaskConfig, create_sample_action_config
-from causalab.tasks.entity_binding.causal_models import create_positional_causal_model, sample_valid_entity_binding_input
+from causalab.tasks.entity_binding.config import (
+    EntityBindingTaskConfig, 
+    create_sample_action_config,
+    create_filling_liquids_config
+)
+from causalab.tasks.entity_binding.causal_models import create_positional_causal_model, create_direct_causal_model, sample_valid_entity_binding_input
 from causalab.tasks.entity_binding.counterfactuals import swap_query_group
 from causalab.tasks.entity_binding.templates import TemplateProcessor
 from causalab.neural.pipeline import LMPipeline
 from causalab.causal.counterfactual_dataset import CounterfactualDataset
 from causalab.experiments.filter import filter_dataset
 from causalab.experiments.interchange_targets import build_residual_stream_targets
-from causalab.experiments.jobs.boundless_DAS_feature_mask_grid import train_boundless_DAS
 from causalab.neural.token_position_builder import TokenPosition, get_last_token_index
+from causalab.neural.pyvene_core.interchange import run_interchange_interventions
+from causalab.experiments.metric import causal_score_intervention_outputs
+from datasets import load_from_disk, Dataset
+from tqdm import tqdm
+import numpy as np
 
 
 # ========== Register Qwen3 support for pyvene ==========
@@ -85,45 +99,79 @@ def register_qwen3_for_pyvene():
 register_qwen3_for_pyvene()
 # ========================================================
 
-
-def create_custom_config() -> EntityBindingTaskConfig:
+def create_custom_config(task_type: str = "action") -> EntityBindingTaskConfig:
     """
-    Create a custom entity binding config with 10 groups and 3 entities per group.
+    Create a custom entity binding config with 10 groups.
     
-    Uses the action template structure (person, object, location) with expanded pools.
+    The number of entities per group depends on the task type:
+    - action: 3 entities per group (person, object, location)
+    - filling_liquids: 3 entities per group (person, container, liquid)
+    
+    Args:
+        task_type: One of "action" (person put object in location) or 
+                  "filling_liquids" (person fills container with liquid)
+    
+    Returns:
+        EntityBindingTaskConfig configured for the specified task type
     """
-    config = create_sample_action_config()
+    if task_type == "filling_liquids":
+        config = create_filling_liquids_config()
+        # Expand entity pools for filling_liquids task to support 10 groups with unique entities
+        config.entity_pools[0] = [
+            "John", "Mary", "Bob", "Sue", "Tim", "Kate", "Dan", "Lily",
+            "Max", "Eva", "Sam", "Zoe", "Leo", "Mia", "Noah", "Ava",
+            "Ben", "Liz", "Tom", "Joy"
+        ]
+        config.entity_pools[1] = [
+            "cup", "glass", "bottle", "mug", "jar", "pitcher", "bowl", "flask",
+            "tumbler", "chalice", "vessel", "container", "tank", "can", "tube", "vial",
+            "goblet", "stein", "carafe", "decanter"
+        ]
+        config.entity_pools[2] = [
+            "beer", "wine", "water", "juice", "milk", "coffee", "tea", "soda",
+            "lemonade", "smoothie", "soup", "broth", "sauce", "syrup", "oil", "honey",
+            "cider", "nectar", "punch", "tonic"
+        ]
+    else:
+        # Default to action task
+        config = create_sample_action_config()
+        
+        # Expand entity pools to support 10 groups
+        # Person pool
+        config.entity_pools[0] = [
+            "Pete", "Ann", "Bob", "Sue", "Tim", "Kate", "Dan", "Lily",
+            "Max", "Eva", "Sam", "Zoe", "Leo", "Mia", "Noah", "Ava",
+            "Ben", "Liz", "Tom", "Joy"
+        ]
+        
+        # Object pool
+        config.entity_pools[1] = [
+            "jam", "water", "book", "coin", "pen", "key", "phone", "watch",
+            "cup", "box", "bag", "hat", "map", "card", "lamp", "ball",
+            "rope", "tape", "tool", "clip"
+        ]
+        
+        # Location pool
+        config.entity_pools[2] = [
+            "cup", "box", "table", "shelf", "drawer", "bag", "pocket", "basket",
+            "desk", "chair", "floor", "rack", "case", "tray", "bin", "stand",
+            "cabinet", "corner", "bench", "counter"
+        ]
     
-    # Set max groups to 10
+    # Set max_groups for all tasks
     config.max_groups = 10
-    config.max_entities_per_group = 3  # person, object, location
     
-    # Expand entity pools to support 10 groups
-    # Person pool
-    config.entity_pools[0] = [
-        "Pete", "Ann", "Bob", "Sue", "Tim", "Kate", "Dan", "Lily",
-        "Max", "Eva", "Sam", "Zoe", "Leo", "Mia", "Noah", "Ava",
-        "Ben", "Liz", "Tom", "Joy"
-    ]
-    
-    # Object pool
-    config.entity_pools[1] = [
-        "jam", "water", "book", "coin", "pen", "key", "phone", "watch",
-        "cup", "box", "bag", "hat", "map", "card", "lamp", "ball",
-        "rope", "tape", "tool", "clip"
-    ]
-    
-    # Location pool
-    config.entity_pools[2] = [
-        "cup", "box", "table", "shelf", "drawer", "bag", "pocket", "basket",
-        "desk", "chair", "floor", "rack", "case", "tray", "bin", "stand",
-        "cabinet", "corner", "bench", "counter"
-    ]
+    # IMPORTANT: Do NOT override max_entities_per_group here!
+    # Each task type has its own correct value set in their configs:
+    # - action: 3 (person, object, location)
+    # - filling_liquids: 3 (person, container, liquid)
     
     # Add instruction wrapper for better performance
-    config.prompt_prefix = "We will ask a question about the following sentences. only return the answer, no other text.\n\n"
+    config.prompt_prefix = "We will ask a question about the following sentences. Only return the answer, no other text.\n\n"
     config.statement_question_separator = "\n\n"
     config.prompt_suffix = "\nAnswer:"
+    config.fixed_query_indices = (0,)
+    config.fixed_answer_index = 1
     
     return config
 
@@ -145,24 +193,24 @@ def create_dataset_with_n_groups(config: EntityBindingTaskConfig, num_groups: in
     """
     from causalab.tasks.entity_binding.causal_models import create_direct_causal_model
     
+    config.fixed_active_groups = num_groups
     def generator():
         # Sample input and ensure it has exactly num_groups
         max_attempts = 100
         for attempt in range(max_attempts):
             input_sample = sample_valid_entity_binding_input(config, ensure_positional_uniqueness=True)
-            if input_sample["active_groups"] == num_groups:
-                break
-        else:
-            # Force active_groups if we couldn't get it naturally
-            input_sample["active_groups"] = num_groups
-            # Ensure query_group is valid
-            query_group = input_sample.get("query_group", 0)
-            if query_group >= num_groups:
-                input_sample["query_group"] = query_group % num_groups
         
         # Regenerate raw_input with correct active_groups
         model = create_direct_causal_model(config)
         model.new_raw_input(input_sample)
+        
+        # Preserve query_indices and answer_index from original input
+        # This ensures we ask about the same position within the group (e.g., first entity, second entity)
+        original_query_indices = input_sample.get("query_indices", (0,))
+        # Ensure query_indices is a tuple (not a list) for consistency
+        if isinstance(original_query_indices, list):
+            original_query_indices = tuple(original_query_indices)
+        original_answer_index = input_sample.get("answer_index", 0)
         
         # Randomly generate counterfactual input independently (not by swapping)
         # This ensures maximum diversity in the training set
@@ -178,7 +226,13 @@ def create_dataset_with_n_groups(config: EntityBindingTaskConfig, num_groups: in
             if query_group_cf >= num_groups:
                 counterfactual_input["query_group"] = query_group_cf % num_groups
         
+        # IMPORTANT: Preserve query_indices and answer_index from original input
+        # This ensures we ask about the same position within the group (e.g., first entity, second entity)
+        counterfactual_input["answer_index"] = original_answer_index
+        
         # Regenerate raw_input for counterfactual with correct active_groups
+        # Ensure query_indices is explicitly set as a tuple before calling new_raw_input
+        counterfactual_input["query_indices"] = original_query_indices  # Already a tuple from above
         model.new_raw_input(counterfactual_input)
         
         return {"input": input_sample, "counterfactual_inputs": [counterfactual_input]}
@@ -257,9 +311,178 @@ def filter_dataset_with_accuracy_check(
     return filtered_dataset, stats
 
 
+def run_vanilla_interchange(
+    causal_model,
+    interchange_target: Dict[int, Any],  # Dict[layer, InterchangeTarget]
+    train_dataset_path: str,
+    test_dataset_path: str,
+    pipeline,
+    target_variable_group: Tuple[str, ...],
+    output_dir: str,
+    metric: Callable[[Any, Any], bool],
+    batch_size: int = 32,
+    save_results: bool = True,
+    verbose: bool = True,
+) -> Dict[str, Any]:
+    """
+    Run vanilla interchange interventions (no training, direct activation swapping).
+    
+    This function runs vanilla interchange interventions on each layer by directly
+    swapping activations between base and counterfactual inputs, without any
+    learned transformation.
+    
+    Args:
+        causal_model: Causal model for generating expected outputs
+        interchange_target: Dict mapping layer number to InterchangeTarget
+        train_dataset_path: Path to training dataset directory
+        test_dataset_path: Path to test dataset directory
+        pipeline: LMPipeline object
+        target_variable_group: Tuple of target variable names
+        output_dir: Output directory for results
+        metric: Function to compare neural output with expected output
+        batch_size: Batch size for evaluation
+        save_results: Whether to save results to disk
+        verbose: Whether to print progress
+        
+    Returns:
+        Dictionary with structure:
+            - train_scores: Dict[int, float] (layer -> score)
+            - test_scores: Dict[int, float] (layer -> score)
+            - metadata: experiment configuration and summary
+            - output_paths: paths to saved files
+    """
+    from pathlib import Path
+    
+    # Load datasets
+    train_hf_dataset = load_from_disk(train_dataset_path)
+    if not isinstance(train_hf_dataset, Dataset):
+        raise TypeError(f"Expected Dataset, got {type(train_hf_dataset).__name__}")
+    train_dataset = CounterfactualDataset(
+        dataset=train_hf_dataset, id="train"
+    )
+    
+    test_hf_dataset = load_from_disk(test_dataset_path)
+    if not isinstance(test_hf_dataset, Dataset):
+        raise TypeError(f"Expected Dataset, got {type(test_hf_dataset).__name__}")
+    test_dataset = CounterfactualDataset(
+        dataset=test_hf_dataset, id="test"
+    )
+    
+    train_scores = {}
+    test_scores = {}
+    
+    # Run interventions for each layer
+    layers = sorted(interchange_target.keys())
+    pbar = tqdm(layers, desc="Running vanilla interchange", disable=not verbose)
+    
+    for layer in pbar:
+        target = interchange_target[layer]
+        key = (layer,)
+        
+        if verbose:
+            pbar.set_description(f"Layer {layer}: train")
+        
+        # Run interventions on train data
+        train_raw_results = {
+            key: run_interchange_interventions(
+                pipeline=pipeline,
+                counterfactual_dataset=train_dataset,
+                interchange_target=target,
+                batch_size=batch_size,
+                output_scores=False,
+            )
+        }
+        
+        # Score train results
+        train_eval = causal_score_intervention_outputs(
+            raw_results=train_raw_results,
+            dataset=train_dataset,
+            causal_model=causal_model,
+            target_variable_groups=[target_variable_group],
+            metric=metric,
+        )
+        
+        if verbose:
+            pbar.set_description(f"Layer {layer}: test")
+        
+        # Run interventions on test data
+        test_raw_results = {
+            key: run_interchange_interventions(
+                pipeline=pipeline,
+                counterfactual_dataset=test_dataset,
+                interchange_target=target,
+                batch_size=batch_size,
+                output_scores=False,
+            )
+        }
+        
+        # Score test results
+        test_eval = causal_score_intervention_outputs(
+            raw_results=test_raw_results,
+            dataset=test_dataset,
+            causal_model=causal_model,
+            target_variable_groups=[target_variable_group],
+            metric=metric,
+        )
+        
+        train_scores[layer] = train_eval["results_by_key"][key]["avg_score"]
+        test_scores[layer] = test_eval["results_by_key"][key]["avg_score"]
+    
+    pbar.close()
+    
+    # Find best layer
+    best_layer = max(test_scores, key=lambda k: test_scores[k])
+    avg_test_score = float(np.mean(list(test_scores.values())))
+    
+    # Create metadata
+    model_name = getattr(pipeline, "model_or_name", None)
+    metadata = {
+        "experiment_type": "vanilla_interchange",
+        "model": model_name,
+        "train_dataset_path": train_dataset_path,
+        "test_dataset_path": test_dataset_path,
+        "target_variable_group": list(target_variable_group),
+        "num_layers": len(interchange_target),
+        "layers": layers,
+        "best_layer": best_layer,
+        "best_test_score": test_scores[best_layer],
+        "avg_test_score": avg_test_score,
+        "batch_size": batch_size,
+    }
+    
+    # Save results if requested
+    output_paths = {}
+    if save_results:
+        output_dir_path = Path(output_dir)
+        output_dir_path.mkdir(parents=True, exist_ok=True)
+        
+        # Save metadata
+        metadata_path = output_dir_path / "metadata.json"
+        with open(metadata_path, "w") as f:
+            json.dump(metadata, f, indent=2)
+        output_paths["metadata"] = str(metadata_path)
+        
+        # Save scores
+        scores = {
+            "train_scores": {str(k): v for k, v in train_scores.items()},
+            "test_scores": {str(k): v for k, v in test_scores.items()},
+        }
+        scores_path = output_dir_path / "scores.json"
+        with open(scores_path, "w") as f:
+            json.dump(scores, f, indent=2)
+        output_paths["scores"] = str(scores_path)
+    
+    return {
+        "train_scores": train_scores,
+        "test_scores": test_scores,
+        "metadata": metadata,
+        "output_paths": output_paths,
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Hypothesis testing for entity binding with Boundless DAS"
+        description="Hypothesis testing for entity binding with vanilla interchange interventions"
     )
     parser.add_argument(
         "--model",
@@ -295,13 +518,7 @@ def main():
         "--batch-size",
         type=int,
         default=32,
-        help="Batch size for filtering and training (default: 32)",
-    )
-    parser.add_argument(
-        "--n-features",
-        type=int,
-        default=32,
-        help="Number of features for DAS (default: 32)",
+        help="Batch size for filtering and evaluation (default: 32)",
     )
     parser.add_argument(
         "--min-accuracy",
@@ -325,6 +542,13 @@ def main():
         type=str,
         default=None,
         help="HuggingFace cache directory (sets HF_HOME env var, must be set before imports)",
+    )
+    parser.add_argument(
+        "--task-type",
+        type=str,
+        default="action",
+        choices=["action", "filling_liquids"],
+        help="Task type: 'action' (person put object in location) or 'filling_liquids' (person fills container with liquid) (default: action)",
     )
     
     args = parser.parse_args()
@@ -377,7 +601,7 @@ def main():
         device = "cpu"
     
     print("=" * 70)
-    print("Entity Binding Hypothesis Testing with Boundless DAS")
+    print("Entity Binding Hypothesis Testing with Vanilla Interchange")
     print("=" * 70)
     print(f"\nConfiguration:")
     print(f"  Model: {args.model}")
@@ -385,6 +609,7 @@ def main():
     print(f"  Dataset size: {args.size}")
     print(f"  Number of groups: {args.num_groups}")
     print(f"  Entities per group: 3")
+    print(f"  Task type: {args.task_type}")
     print(f"  Output directory: {output_dir}")
     print(f"  Test mode: {args.test}")
     if selected_layers is not None:
@@ -393,7 +618,8 @@ def main():
     
     # Step 1: Create task configuration
     print("Step 1: Creating task configuration...")
-    config = create_custom_config()
+    config = create_custom_config(task_type=args.task_type)
+    print(f"  Task type: {args.task_type}")
     print(f"  Max groups: {config.max_groups}")
     print(f"  Entities per group: {config.max_entities_per_group}")
     print(f"  Template: {config.statement_template}")
@@ -415,6 +641,7 @@ def main():
         "device": device,
         "num_groups": args.num_groups,
         "entities_per_group": 3,
+        "task_type": args.task_type,
         "dataset_size": args.size,
         "raw_dataset_size": len(dataset),
         "step": "dataset_generated"
@@ -425,13 +652,29 @@ def main():
     print()
     
     # Show example
+    # Create causal model to compute raw_output
+    causal_model_for_display = create_positional_causal_model(config)
     if len(dataset) > 0:
         print("Example from dataset:")
-        example = dataset[0]
-        print(f"  Input:  {example['input']['raw_input']}...")
-        print(f"  Counter: {example['counterfactual_inputs'][0]['raw_input']}...")
-        print()
-    
+        for i, example in zip(range(5), dataset):
+            # Compute raw_output for input if not present
+            input_dict = example['input'].copy()
+            if 'raw_output' not in input_dict:
+                result = causal_model_for_display.run_forward(input_dict)
+                input_dict['raw_output'] = result.get('raw_output', 'N/A')
+            
+            # Compute raw_output for counterfactual if not present
+            counterfactual_dict = example['counterfactual_inputs'][0].copy()
+            if 'raw_output' not in counterfactual_dict:
+                result = causal_model_for_display.run_forward(counterfactual_dict)
+                counterfactual_dict['raw_output'] = result.get('raw_output', 'N/A')
+            
+            print(f"  Input:  {input_dict['raw_input']}...")
+            print(f"  Expected Answer: {input_dict['raw_output']}")
+            print(f"  Counter: {counterfactual_dict['raw_input']}...")
+            print(f"  Expected Answer: {counterfactual_dict['raw_output']}")
+            print()
+  
     # Step 3: Load model and causal model
     print(f"Step 3: Loading model {args.model}...")
     pipeline = LMPipeline(
@@ -523,21 +766,8 @@ def main():
         json.dump(partial_summary, f, indent=2)
     print()
     
-    # Step 6: Setup for boundless DAS
-    print("Step 6: Setting up Boundless DAS...")
-    
-    # Training configuration (needed for saving config)
-    train_config = {
-        "train_batch_size": args.batch_size,
-        "evaluation_batch_size": args.batch_size,
-        "training_epoch": 10,
-        "init_lr": 0.001,
-        "masking": {
-            "regularization_coefficient": 0.01,
-            "temperature_annealing_fraction": 0.5,
-            "temperature_schedule": (1.0, 0.001),
-        },
-    }
+    # Step 6: Setup for vanilla interchange
+    print("Step 6: Setting up vanilla interchange...")
     
     # Create token position (last token)
     def last_token_indexer(input_dict, is_original=True):
@@ -568,6 +798,7 @@ def main():
         layers=layers,
         token_positions=token_positions,
         mode="one_target_per_layer",
+        target_output=False,  # Use block_input (resid_pre) to match original paper
     )
     
     # Convert to {layer: target} format
@@ -577,73 +808,75 @@ def main():
     print(f"  Token position: last_token")
     print(f"  Target variable: positional_query_group")
     
-    # Save partial result: DAS configuration
-    das_config = {
+    # Save partial result: Intervention configuration
+    intervention_config = {
         "num_layers": num_layers,
         "layer_start": layers[0] if layers else 0,
         "layer_end": layers[-1] + 1 if layers else num_layers,
         "layers": layers,
         "token_position": "last_token",
         "target_variable": "positional_query_group",
-        "n_features": args.n_features,
-        "train_config": train_config
+        "intervention_type": "vanilla",
     }
-    das_config_path = output_dir / "das_config.json"
-    with open(das_config_path, "w") as f:
-        json.dump(das_config, f, indent=2)
-    print(f"  Saved DAS configuration to {das_config_path}")
+    intervention_config_path = output_dir / "intervention_config.json"
+    with open(intervention_config_path, "w") as f:
+        json.dump(intervention_config, f, indent=2)
+    print(f"  Saved intervention configuration to {intervention_config_path}")
     
     # Update partial summary
     partial_summary.update({
         "num_layers": num_layers,
         "layer_start": layers[0] if layers else 0,
         "layer_end": layers[-1] + 1 if layers else num_layers,
-        "n_features": args.n_features,
-        "step": "das_setup_complete"
+        "intervention_type": "vanilla",
+        "step": "intervention_setup_complete"
     })
     with open(partial_summary_path, "w") as f:
         json.dump(partial_summary, f, indent=2)
     print()
     
-    # Step 7: Run boundless DAS
-    print("Step 7: Running Boundless DAS...")
-    print("  This may take a while depending on model size and dataset size...")
+    # Step 7: Run vanilla interchange
+    print("Step 7: Running vanilla interchange intervention...")
     print()
     
-    das_output_dir = output_dir / "boundless_das"
-    das_output_dir.mkdir(exist_ok=True)
+    intervention_output_dir = output_dir / "vanilla_interchange"
+    intervention_output_dir.mkdir(exist_ok=True)
     
-    # Update partial summary before DAS training
+    # Update partial summary before intervention
     partial_summary.update({
-        "step": "das_training_started",
-        "das_output_dir": str(das_output_dir)
+        "step": "vanilla_intervention_started",
+        "intervention_type": "vanilla",
+        "intervention_output_dir": str(intervention_output_dir)
     })
     with open(partial_summary_path, "w") as f:
         json.dump(partial_summary, f, indent=2)
     
     try:
-        result = train_boundless_DAS(
+        result = run_vanilla_interchange(
             causal_model=causal_model,
             interchange_target=residual_targets_by_layer,
             train_dataset_path=str(train_path),
             test_dataset_path=str(test_path),
             pipeline=pipeline,
             target_variable_group=("positional_query_group",),
-            output_dir=str(das_output_dir),
+            output_dir=str(intervention_output_dir),
             metric=checker,
-            n_features=args.n_features,
-            config=train_config,
+            batch_size=args.batch_size,
             save_results=True,
             verbose=True,
         )
         
         print()
-        print("✓ Boundless DAS training complete!")
+        print("✓ Vanilla interchange intervention complete!")
         print()
+        
+        # Add num_groups and task_type to result metadata
+        result["metadata"]["num_groups"] = args.num_groups
+        result["metadata"]["task_type"] = args.task_type
         
         # Update partial summary with IIA scores for each layer
         partial_summary.update({
-            "step": "das_training_complete",
+            "step": "vanilla_intervention_complete",
             "best_layer": result["metadata"]["best_layer"],
             "best_test_score": result["metadata"]["best_test_score"],
             "avg_test_score": result["metadata"]["avg_test_score"],
@@ -663,6 +896,7 @@ def main():
             "device": device,
             "num_groups": args.num_groups,
             "entities_per_group": 3,
+            "task_type": args.task_type,
             "dataset_size": args.size,
             "filter_stats": filter_stats,
             "train_size": len(train_dataset),
@@ -671,7 +905,7 @@ def main():
             "layer_start": layers[0] if layers else 0,
             "layer_end": layers[-1] + 1 if layers else num_layers,
             "layers": layers,
-            "n_features": args.n_features,
+            "intervention_type": "vanilla",
             "target_variable": "positional_query_group",
             "best_layer": result["metadata"]["best_layer"],
             "best_test_score": result["metadata"]["best_test_score"],
@@ -686,22 +920,12 @@ def main():
             json.dump(summary, f, indent=2)
         
         # Save full result
-        result_path = output_dir / "boundless_das_result.pkl"
+        result_path = output_dir / "vanilla_interchange_result.pkl"
         with open(result_path, "wb") as f:
             pickle.dump(result, f)
         
-        # Check for saved model weights
-        models_dir = das_output_dir / "models"
-        if models_dir.exists():
-            model_paths = list(models_dir.glob("*"))
-            summary["model_weights_path"] = str(models_dir)
-            summary["num_saved_models"] = len(model_paths)
-        
         print(f"  Summary saved to: {summary_path}")
         print(f"  Full result saved to: {result_path}")
-        if models_dir.exists():
-            model_count = len(list(models_dir.glob("*")))
-            print(f"  Model weights saved to: {models_dir} ({model_count} layer models)")
         print()
         
         # Print summary
@@ -709,6 +933,7 @@ def main():
         print("RESULTS SUMMARY")
         print("=" * 70)
         print(f"Model: {args.model}")
+        print(f"Intervention type: vanilla")
         print(f"Filter accuracy: {filter_stats['accuracy']:.1%}")
         print(f"Best layer: {result['metadata']['best_layer']}")
         print(f"Best test score (IIA accuracy): {result['metadata']['best_test_score']:.3f}")
@@ -725,78 +950,25 @@ def main():
         print("Saved files:")
         print(f"  - Summary: {summary_path}")
         print(f"  - Full result: {result_path}")
-        if models_dir.exists():
-            print(f"  - Model weights: {models_dir}/ (one directory per layer)")
-            print(f"  - Feature indices: {das_output_dir}/training/feature_indices.json")
-            print(f"  - Heatmaps: {das_output_dir}/heatmaps/")
         print("=" * 70)
         
         return 0
         
     except Exception as e:
-        print(f"\n❌ Error during Boundless DAS training: {e}")
+        print(f"\n❌ Error during vanilla interchange intervention: {e}")
         import traceback
         traceback.print_exc()
         
-        # Try to load any partial results from DAS output directory
-        test_scores_path = das_output_dir / "test_eval" / "scores.json"
-        train_scores_path = das_output_dir / "train_eval" / "scores.json"
-        
-        partial_test_scores = {}
-        partial_train_scores = {}
-        
-        if test_scores_path.exists():
-            try:
-                with open(test_scores_path, "r") as f:
-                    scores_dict = json.load(f)
-                # Convert string keys back to layer numbers
-                # Keys are like "(0,)" or "0" depending on format
-                for key_str, score in scores_dict.items():
-                    try:
-                        # Try to parse as tuple string like "(0,)"
-                        if key_str.startswith("(") and key_str.endswith(")"):
-                            layer = int(key_str.strip("()").split(",")[0])
-                        else:
-                            layer = int(key_str)
-                        partial_test_scores[layer] = score
-                    except (ValueError, IndexError):
-                        pass
-                print(f"  Loaded partial test scores from {test_scores_path}")
-            except Exception as load_error:
-                print(f"  Warning: Could not load test scores: {load_error}")
-        
-        if train_scores_path.exists():
-            try:
-                with open(train_scores_path, "r") as f:
-                    scores_dict = json.load(f)
-                # Convert string keys back to layer numbers
-                for key_str, score in scores_dict.items():
-                    try:
-                        if key_str.startswith("(") and key_str.endswith(")"):
-                            layer = int(key_str.strip("()").split(",")[0])
-                        else:
-                            layer = int(key_str)
-                        partial_train_scores[layer] = score
-                    except (ValueError, IndexError):
-                        pass
-                print(f"  Loaded partial train scores from {train_scores_path}")
-            except Exception as load_error:
-                print(f"  Warning: Could not load train scores: {load_error}")
-        
-        # Save error state to partial summary, including any partial scores
+        # Save error state to partial summary
         partial_summary.update({
             "error": str(e),
             "error_traceback": traceback.format_exc(),
-            "step": "das_training_failed",
-            "partial_test_scores_by_layer": partial_test_scores if partial_test_scores else None,
-            "partial_train_scores_by_layer": partial_train_scores if partial_train_scores else None,
+            "step": "vanilla_intervention_failed",
         })
         with open(partial_summary_path, "w") as f:
             json.dump(partial_summary, f, indent=2)
         print(f"\n  Partial results saved to: {output_dir}")
         print(f"  Check partial_summary.json for progress details")
-        if partial_test_scores:
-            print(f"  Found IIA scores for {len(partial_test_scores)} layer(s): {sorted(partial_test_scores.keys())}")
         return 1
 
 

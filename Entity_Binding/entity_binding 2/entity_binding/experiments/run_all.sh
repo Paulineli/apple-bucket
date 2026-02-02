@@ -49,7 +49,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-cd /mnt/polished-lake/home/atticus/CausalAbstraction
+# cd /mnt/polished-lake/home/atticus/CausalAbstraction
 
 echo "=========================================="
 echo "Entity Binding Task - Full Pipeline"
@@ -62,7 +62,7 @@ echo ""
 
 # Step 1: Generate and filter dataset
 echo "[Step 1/3] Generating and filtering dataset..."
-uv run python tasks/entity_binding/experiments/generate_and_filter_dataset.py \
+uv run python generate_and_filter_dataset.py \
     --config "$CONFIG" \
     --model "$MODEL" \
     $TEST_FLAG
@@ -72,16 +72,16 @@ echo ""
 
 # Determine dataset path
 if [ -n "$TEST_FLAG" ]; then
-    DATASET_PATH="tasks/entity_binding/datasets/${CONFIG}_swap_query_group_test/filtered_dataset"
-    RESULTS_PATH="tasks/entity_binding/results/${CONFIG}_test/raw_results.pkl"
+    DATASET_PATH="datasets/${CONFIG}_swap_query_group_test/filtered_dataset"
+    RESULTS_PATH="results/${CONFIG}_test/raw_results.pkl"
 else
-    DATASET_PATH="tasks/entity_binding/datasets/${CONFIG}_swap_query_group/filtered_dataset"
-    RESULTS_PATH="tasks/entity_binding/results/${CONFIG}/raw_results.pkl"
+    DATASET_PATH="datasets/${CONFIG}_swap_query_group/filtered_dataset"
+    RESULTS_PATH="results/${CONFIG}/raw_results.pkl"
 fi
 
 # Step 2: Run interventions
 echo "[Step 2/3] Running interventions..."
-uv run python tasks/entity_binding/experiments/run_interventions.py \
+uv run python run_interventions.py \
     --config "$CONFIG" \
     --dataset "$DATASET_PATH" \
     --model "$MODEL" \
@@ -92,7 +92,7 @@ echo ""
 
 # Step 3: Compute scores and visualize
 echo "[Step 3/3] Computing scores and generating visualizations..."
-uv run python tasks/entity_binding/experiments/visualize_results.py \
+uv run python visualize_results.py \
     --results "$RESULTS_PATH"
 
 echo "✓ Step 3 complete"
@@ -104,7 +104,7 @@ echo "=========================================="
 echo ""
 
 if [ -n "$TEST_FLAG" ]; then
-    echo "Results saved to: tasks/entity_binding/results/${CONFIG}_test/"
+    echo "Results saved to: results/${CONFIG}_test/"
 else
-    echo "Results saved to: tasks/entity_binding/results/${CONFIG}/"
+    echo "Results saved to: results/${CONFIG}/"
 fi

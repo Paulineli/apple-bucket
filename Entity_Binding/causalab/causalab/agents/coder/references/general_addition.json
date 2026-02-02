@@ -1,9 +1,0 @@
-{
-    "gemma_individual_digits_drop_below_90": 3,
-    "gemma_two_digits_strongest_above_ones": 27,
-    "gemma_tens_digit_second_number_peak": 26,
-    "llama_first_two_digits_above_90_last_layer": 15,
-    "llama_second_two_digits_above_90_last_layer": 14,
-    "olmo_first_two_digits_above_90_last_layer": 18,
-    "olmo_second_two_digits_above_90_last_layer": 18
-}
