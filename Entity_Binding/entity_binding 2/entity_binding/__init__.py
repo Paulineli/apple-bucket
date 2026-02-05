@@ -1,1 +1,0 @@
-# Entity Binding Task Implementation

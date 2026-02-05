@@ -600,20 +600,38 @@ def _build_absolute_index_factory(name: str, position: int) -> Callable:
 
     def factory(pipeline):
         def indexer(input_sample: CausalTrace):
-            ids = pipeline.load([input_sample])["input_ids"][0]
+            enc = pipeline.load([input_sample])
+            ids = enc["input_ids"][0]
             total_tokens = len(ids)
 
-            # Handle negative indices
+            # If the sequence is padded, interpret indexing over *non-pad* tokens.
+            # This makes specs like {"position": -1} reliably mean "last real token",
+            # independent of padding_side and max_length.
+            attn = enc.get("attention_mask")
+            if attn is not None:
+                mask = attn[0].tolist()
+                nonpad = [i for i, m in enumerate(mask) if m == 1]
+                if nonpad and len(nonpad) != total_tokens:
+                    n = len(nonpad)
+                    if position < 0:
+                        idx = n + position
+                    else:
+                        idx = position
+                    if idx < 0 or idx >= n:
+                        raise ValueError(
+                            f"Position {position} out of range for non-pad sequence length {n}"
+                        )
+                    return [nonpad[idx]]
+
+            # No padding (or no attention_mask): fall back to raw token indices.
             if position < 0:
                 actual_position = total_tokens + position
             else:
                 actual_position = position
-
             if actual_position < 0 or actual_position >= total_tokens:
                 raise ValueError(
                     f"Position {position} out of range for sequence of length {total_tokens}"
                 )
-
             return [actual_position]
 
         return TokenPosition(indexer, pipeline, id=name)

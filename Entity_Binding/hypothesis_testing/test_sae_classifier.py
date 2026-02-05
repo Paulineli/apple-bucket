@@ -231,6 +231,18 @@ def main():
         action="store_true",
         help="If set, keep low IIA cluster instead of filtering it out"
     )
+    parser.add_argument(
+        "--filtered-dataset-path",
+        type=str,
+        default=None,
+        help="Path to filtered dataset .pkl (from a previous run). If set, use this dataset instead of generating and filtering."
+    )
+    parser.add_argument(
+        "--graph-path",
+        type=str,
+        default=None,
+        help="Path to whole-graph .pkl (from a previous run). If set, load this graph instead of building it. Must match the filtered dataset size."
+    )
     
     args = parser.parse_args()
     
@@ -294,24 +306,33 @@ def main():
     # Create config and causal model
     config = create_config(args.task, args.num_groups)
     causal_model = create_positional_entity_causal_model(config)
-    
-    # Step 1: Generate dataset
-    print(f"\nGenerating {args.sample_size} input samples...")
-    samples = generate_input_samples(
-        config, causal_model, args.sample_size,
-        args.query_index, args.answer_index, args.num_groups
-    )
-    
-    # Step 2: Filter samples (like in partition_graph.py)
-    print("\nFiltering samples (keeping only perfect model performance)...")
-    filtered_samples = filter_input_samples(
-        samples, pipeline, causal_model, args.batch_size
-    )
-    
-    if len(filtered_samples) == 0:
-        raise ValueError("No samples passed filtering! Model cannot perform correctly on any samples.")
-    
-    print(f"  Kept {len(filtered_samples)}/{len(samples)} samples after filtering")
+
+    # Step 1 & 2: Get filtered dataset (either load from file or generate + filter)
+    if args.filtered_dataset_path is not None:
+        path = Path(args.filtered_dataset_path)
+        if not path.exists():
+            raise FileNotFoundError(f"Filtered dataset not found: {path}")
+        print(f"\nLoading filtered dataset from {path}...")
+        with open(path, 'rb') as f:
+            filtered_samples = pickle.load(f)
+        if not isinstance(filtered_samples, list) or len(filtered_samples) == 0:
+            raise ValueError("Loaded dataset must be a non-empty list of samples.")
+        print(f"  Loaded {len(filtered_samples)} samples")
+    else:
+        # Generate dataset
+        print(f"\nGenerating {args.sample_size} input samples...")
+        samples = generate_input_samples(
+            config, causal_model, args.sample_size,
+            args.query_index, args.answer_index, args.num_groups
+        )
+        # Filter samples (like in partition_graph.py)
+        print("\nFiltering samples (keeping only perfect model performance)...")
+        filtered_samples = filter_input_samples(
+            samples, pipeline, causal_model, args.batch_size
+        )
+        if len(filtered_samples) == 0:
+            raise ValueError("No samples passed filtering! Model cannot perform correctly on any samples.")
+        print(f"  Kept {len(filtered_samples)}/{len(samples)} samples after filtering")
     
     # Step 3: Predict cluster membership using classifier
     print(f"\nPredicting cluster membership for {len(filtered_samples)} samples...")
@@ -334,63 +355,82 @@ def main():
         cluster_type = "high IIA" if cluster_id == classifier_metadata['cluster_0_id'] else "low IIA"
         print(f"  Cluster {cluster_id} ({cluster_type}): {count} samples")
     
-    # Step 4: Filter to separate clusters
+    # Step 4: Summary by cluster (for reporting only)
     keep_mask = predictions == cluster_to_keep
     filtered_by_classifier = [s for s, keep in zip(filtered_samples, keep_mask) if keep]
     filtered_out_samples = [s for s, keep in zip(filtered_samples, keep_mask) if not keep]
     
-    print(f"\nFiltered to {len(filtered_by_classifier)} samples in cluster {cluster_to_keep}")
-    print(f"Filtered out {len(filtered_out_samples)} samples in cluster {cluster_to_filter}")
+    print(f"\nCluster {cluster_to_keep}: {len(filtered_by_classifier)} samples")
+    print(f"Cluster {cluster_to_filter}: {len(filtered_out_samples)} samples")
     
-    # Step 5: Build graphs and compute IIA for both clusters
+    # Step 5: Get graph for the whole filtered dataset (build or load)
+    full_adj_matrix = None
+    full_iia = None
+    full_undirected_density = None
     cluster_iia = None
+    cluster_undirected_density = None
     filtered_out_iia = None
-    
-    # Build graph for kept cluster
-    if len(filtered_by_classifier) >= 2:
-        print(f"\nBuilding DIRECTED graph for kept cluster (cluster {cluster_to_keep})...")
-        adj_matrix_kept = build_directed_graph(
-            pipeline, causal_model, config, filtered_by_classifier,
-            args.layer, args.batch_size
-        )
-        
-        # Compute IIA for kept cluster
-        labels_kept = np.zeros(len(filtered_by_classifier), dtype=int)
-        cluster_iia, cluster_undirected_density = compute_directed_and_undirected_density_from_directed(adj_matrix_kept)
-        print(f"  IIA for kept cluster {cluster_to_keep}: {cluster_iia:.4f}")
-        print(f"  Undirected density for kept cluster {cluster_to_keep}: {cluster_undirected_density:.4f}")
+    filtered_out_undirected_density = None
+
+    if len(filtered_samples) >= 2:
+        if args.graph_path is not None:
+            path = Path(args.graph_path)
+            if not path.exists():
+                raise FileNotFoundError(f"Graph file not found: {path}")
+            print(f"\nLoading graph from {path}...")
+            with open(path, 'rb') as f:
+                full_adj_matrix = pickle.load(f)
+            full_adj_matrix = np.asarray(full_adj_matrix)
+            expected = (len(filtered_samples), len(filtered_samples))
+            if full_adj_matrix.shape != expected:
+                raise ValueError(
+                    f"Loaded graph shape {full_adj_matrix.shape} does not match dataset size {len(filtered_samples)} (expected {expected})"
+                )
+            print(f"  Loaded graph with {full_adj_matrix.shape[0]} nodes")
+            full_iia, full_undirected_density = compute_directed_and_undirected_density_from_directed(full_adj_matrix)
+            print(f"  IIA for whole graph: {full_iia:.4f}")
+            print(f"  Undirected density for whole graph: {full_undirected_density:.4f}")
+        else:
+            print(f"\nBuilding DIRECTED graph for whole filtered dataset ({len(filtered_samples)} samples)...")
+            full_adj_matrix = build_directed_graph(
+                pipeline, causal_model, config, filtered_samples,
+                args.layer, args.batch_size
+            )
+            full_iia, full_undirected_density = compute_directed_and_undirected_density_from_directed(full_adj_matrix)
+            print(f"  IIA for whole graph: {full_iia:.4f}")
+            print(f"  Undirected density for whole graph: {full_undirected_density:.4f}")
     else:
-        print(f"\nSkipping graph building for kept cluster (only {len(filtered_by_classifier)} samples, need at least 2)")
-        adj_matrix_kept = None
-    
-    # Build graph for filtered-out cluster
-    if len(filtered_out_samples) >= 2:
-        print(f"\nBuilding DIRECTED graph for filtered-out cluster (cluster {cluster_to_filter})...")
-        adj_matrix_filtered = build_directed_graph(
-            pipeline, causal_model, config, filtered_out_samples,
-            args.layer, args.batch_size
-        )
-        
-        # Compute IIA for filtered-out cluster
-        # labels_filtered = np.zeros(len(filtered_out_samples), dtype=int)
-        filtered_out_iia, filtered_out_undirected_density = compute_directed_and_undirected_density_from_directed(adj_matrix_filtered)
-        print(f"  IIA for filtered-out cluster {cluster_to_filter}: {filtered_out_iia:.4f}")
-        print(f"  Undirected density for filtered-out cluster {cluster_to_filter}: {filtered_out_undirected_density:.4f}")
-    else:
-        print(f"\nSkipping graph building for filtered-out cluster (only {len(filtered_out_samples)} samples, need at least 2)")
-        adj_matrix_filtered = None
-    
+        print(f"\nSkipping graph (only {len(filtered_samples)} samples, need at least 2)")
+
+    # Compute IIA and density for each cluster from subgraphs of the whole graph (no extra model calls)
+    if full_adj_matrix is not None:
+        kept_idx = np.where(keep_mask)[0]
+        filtered_out_idx = np.where(~keep_mask)[0]
+        if len(kept_idx) >= 2:
+            sub_kept = full_adj_matrix[np.ix_(kept_idx, kept_idx)]
+            cluster_iia, cluster_undirected_density = compute_directed_and_undirected_density_from_directed(sub_kept)
+            print(f"\n  IIA for kept cluster {cluster_to_keep} (from whole graph): {cluster_iia:.4f}")
+            print(f"  Undirected density for kept cluster {cluster_to_keep}: {cluster_undirected_density:.4f}")
+        if len(filtered_out_idx) >= 2:
+            sub_filtered_out = full_adj_matrix[np.ix_(filtered_out_idx, filtered_out_idx)]
+            filtered_out_iia, filtered_out_undirected_density = compute_directed_and_undirected_density_from_directed(sub_filtered_out)
+            print(f"  IIA for filtered-out cluster {cluster_to_filter} (from whole graph): {filtered_out_iia:.4f}")
+            print(f"  Undirected density for filtered-out cluster {cluster_to_filter}: {filtered_out_undirected_density:.4f}")
+
     print(f"\nResults:")
-    print(f"  Initial samples: {args.sample_size}")
+    if args.filtered_dataset_path is None:
+        print(f"  Initial samples: {args.sample_size}")
     print(f"  After model filtering: {len(filtered_samples)}")
-    print(f"  After classifier filtering (kept): {len(filtered_by_classifier)}")
-    print(f"  After classifier filtering (filtered out): {len(filtered_out_samples)}")
+    print(f"  Cluster {cluster_to_keep}: {len(filtered_by_classifier)} samples")
+    print(f"  Cluster {cluster_to_filter}: {len(filtered_out_samples)} samples")
+    if full_iia is not None:
+        print(f"  IIA for whole graph: {full_iia:.4f}")
     if cluster_iia is not None:
         print(f"  IIA for kept cluster {cluster_to_keep}: {cluster_iia:.4f}")
     if filtered_out_iia is not None:
         print(f"  IIA for filtered-out cluster {cluster_to_filter}: {filtered_out_iia:.4f}")
-    
-    # Save results
+
+    # Save results (include cluster_labels in JSON; one entry per sample in same order as filtered_samples)
     results = {
         "task": args.task,
         "num_groups": args.num_groups,
@@ -398,49 +438,42 @@ def main():
         "layer": args.layer,
         "classifier_path": args.classifier_path,
         "classifier_metadata": classifier_metadata,
-        "initial_sample_size": args.sample_size,
+        "initial_sample_size": args.sample_size if args.filtered_dataset_path is None else None,
+        "filtered_dataset_path": args.filtered_dataset_path,
+        "graph_path": args.graph_path,
         "after_model_filtering": len(filtered_samples),
-        "after_classifier_filtering_kept": len(filtered_by_classifier),
-        "after_classifier_filtering_filtered_out": len(filtered_out_samples),
         "cluster_kept": int(cluster_to_keep),
         "cluster_filtered": int(cluster_to_filter),
-        "iia_kept_cluster": float(cluster_iia) if cluster_iia is not None else None,
-        "iia_filtered_out_cluster": float(filtered_out_iia) if filtered_out_iia is not None else None,
-        "undirected_density_kept_cluster": float(cluster_undirected_density) if cluster_undirected_density is not None else None,
-        "undirected_density_filtered_out_cluster": float(filtered_out_undirected_density) if filtered_out_undirected_density is not None else None,
+        "count_cluster_kept": len(filtered_by_classifier),
+        "count_cluster_filtered": len(filtered_out_samples),
         "prediction_distribution": {int(k): int(v) for k, v in zip(unique, counts)},
+        "iia_whole_graph": float(full_iia) if full_iia is not None else None,
+        "undirected_density_whole_graph": float(full_undirected_density) if full_undirected_density is not None else None,
+        "iia_kept_cluster": float(cluster_iia) if cluster_iia is not None else None,
+        "undirected_density_kept_cluster": float(cluster_undirected_density) if cluster_undirected_density is not None else None,
+        "iia_filtered_out_cluster": float(filtered_out_iia) if filtered_out_iia is not None else None,
+        "undirected_density_filtered_out_cluster": float(filtered_out_undirected_density) if filtered_out_undirected_density is not None else None,
+        "cluster_labels": [int(p) for p in predictions],
     }
     
     results_path = output_dir / f"classifier_filter_results_{args.task}_{args.layer}_{args.num_groups}_{args.sample_size}_{model_safe}.json"
     with open(results_path, 'w') as f:
         json.dump(results, f, indent=2)
     
-    # Save filtered dataset (kept cluster)
-    filtered_dataset_path = output_dir / f"filtered_by_classifier_{args.task}_{args.layer}_{args.num_groups}_{args.sample_size}_{model_safe}.pkl"
-    with open(filtered_dataset_path, 'wb') as f:
-        pickle.dump(filtered_by_classifier, f)
+    # Save whole filtered dataset (after model filtering; one file)
+    dataset_path = output_dir / f"filtered_dataset_{args.task}_{args.layer}_{args.num_groups}_{args.sample_size}_{model_safe}.pkl"
+    with open(dataset_path, 'wb') as f:
+        pickle.dump(filtered_samples, f)
     
-    # Save filtered-out dataset
-    filtered_out_dataset_path = output_dir / f"filtered_out_by_classifier_{args.task}_{args.layer}_{args.num_groups}_{args.sample_size}_{model_safe}.pkl"
-    with open(filtered_out_dataset_path, 'wb') as f:
-        pickle.dump(filtered_out_samples, f)
-    
-    # Save graphs
-    if adj_matrix_kept is not None:
-        graph_path = output_dir / f"graph_classifier_filtered_{args.task}_{args.layer}_{args.num_groups}_{args.sample_size}_{model_safe}.pkl"
+    # Save whole graph (one file)
+    if full_adj_matrix is not None:
+        graph_path = output_dir / f"graph_whole_{args.task}_{args.layer}_{args.num_groups}_{args.sample_size}_{model_safe}.pkl"
         with open(graph_path, 'wb') as f:
-            pickle.dump(adj_matrix_kept, f)
-        print(f"Graph (kept cluster) saved to: {graph_path}")
-    
-    if adj_matrix_filtered is not None:
-        graph_filtered_path = output_dir / f"graph_classifier_filtered_out_{args.task}_{args.layer}_{args.num_groups}_{args.sample_size}_{model_safe}.pkl"
-        with open(graph_filtered_path, 'wb') as f:
-            pickle.dump(adj_matrix_filtered, f)
-        print(f"Graph (filtered-out cluster) saved to: {graph_filtered_path}")
+            pickle.dump(full_adj_matrix, f)
+        print(f"Graph (whole) saved to: {graph_path}")
     
     print(f"\nResults saved to: {results_path}")
-    print(f"Filtered dataset (kept) saved to: {filtered_dataset_path}")
-    print(f"Filtered dataset (filtered-out) saved to: {filtered_out_dataset_path}")
+    print(f"Filtered dataset saved to: {dataset_path}")
     print("=" * 70)
     
     return 0

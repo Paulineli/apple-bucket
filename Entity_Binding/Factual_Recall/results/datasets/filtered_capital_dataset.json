@@ -1,0 +1,786 @@
+[
+  {
+    "input": {
+      "A": "Russia",
+      "raw_input": "The capital of Russia is ",
+      "B": "Moscow",
+      "raw_output": "Moscow"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Poland",
+        "raw_input": "The capital of Poland is ",
+        "B": "Warsaw",
+        "raw_output": "Warsaw"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Ethiopia",
+      "raw_input": "The capital of Ethiopia is ",
+      "B": "Addis Ababa",
+      "raw_output": "Addis Ababa"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Thailand",
+        "raw_input": "The capital of Thailand is ",
+        "B": "Bangkok",
+        "raw_output": "Bangkok"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Spain",
+      "raw_input": "The capital of Spain is ",
+      "B": "Madrid",
+      "raw_output": "Madrid"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Russia",
+        "raw_input": "The capital of Russia is ",
+        "B": "Moscow",
+        "raw_output": "Moscow"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Australia",
+      "raw_input": "The capital of Australia is ",
+      "B": "Canberra",
+      "raw_output": "Canberra"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Switzerland",
+        "raw_input": "The capital of Switzerland is ",
+        "B": "Bern",
+        "raw_output": "Bern"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "France",
+      "raw_input": "The capital of France is ",
+      "B": "Paris",
+      "raw_output": "Paris"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Japan",
+        "raw_input": "The capital of Japan is ",
+        "B": "Tokyo",
+        "raw_output": "Tokyo"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Illinois",
+      "raw_input": "The capital of Illinois is ",
+      "B": "Springfield",
+      "raw_output": "Springfield"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Nigeria",
+        "raw_input": "The capital of Nigeria is ",
+        "B": "Abuja",
+        "raw_output": "Abuja"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Nigeria",
+      "raw_input": "The capital of Nigeria is ",
+      "B": "Abuja",
+      "raw_output": "Abuja"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Japan",
+        "raw_input": "The capital of Japan is ",
+        "B": "Tokyo",
+        "raw_output": "Tokyo"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Nigeria",
+      "raw_input": "The capital of Nigeria is ",
+      "B": "Abuja",
+      "raw_output": "Abuja"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Norway",
+        "raw_input": "The capital of Norway is ",
+        "B": "Oslo",
+        "raw_output": "Oslo"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Spain",
+      "raw_input": "The capital of Spain is ",
+      "B": "Madrid",
+      "raw_output": "Madrid"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Switzerland",
+        "raw_input": "The capital of Switzerland is ",
+        "B": "Bern",
+        "raw_output": "Bern"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Finland",
+      "raw_input": "The capital of Finland is ",
+      "B": "Helsinki",
+      "raw_output": "Helsinki"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Iran",
+        "raw_input": "The capital of Iran is ",
+        "B": "Tehran",
+        "raw_output": "Tehran"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Argentina",
+      "raw_input": "The capital of Argentina is ",
+      "B": "Buenos Aires",
+      "raw_output": "Buenos Aires"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Poland",
+        "raw_input": "The capital of Poland is ",
+        "B": "Warsaw",
+        "raw_output": "Warsaw"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "South Korea",
+      "raw_input": "The capital of South Korea is ",
+      "B": "Seoul",
+      "raw_output": "Seoul"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Germany",
+        "raw_input": "The capital of Germany is ",
+        "B": "Berlin",
+        "raw_output": "Berlin"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Czech Republic",
+      "raw_input": "The capital of Czech Republic is ",
+      "B": "Prague",
+      "raw_output": "Prague"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Ecuador",
+        "raw_input": "The capital of Ecuador is ",
+        "B": "Quito",
+        "raw_output": "Quito"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Jamaica",
+      "raw_input": "The capital of Jamaica is ",
+      "B": "Kingston",
+      "raw_output": "Kingston"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Colombia",
+        "raw_input": "The capital of Colombia is ",
+        "B": "Bogot\u00e1",
+        "raw_output": "Bogot\u00e1"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Australia",
+      "raw_input": "The capital of Australia is ",
+      "B": "Canberra",
+      "raw_output": "Canberra"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Egypt",
+        "raw_input": "The capital of Egypt is ",
+        "B": "Cairo",
+        "raw_output": "Cairo"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Portugal",
+      "raw_input": "The capital of Portugal is ",
+      "B": "Lisbon",
+      "raw_output": "Lisbon"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Pakistan",
+        "raw_input": "The capital of Pakistan is ",
+        "B": "Islamabad",
+        "raw_output": "Islamabad"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Czech Republic",
+      "raw_input": "The capital of Czech Republic is ",
+      "B": "Prague",
+      "raw_output": "Prague"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Ethiopia",
+        "raw_input": "The capital of Ethiopia is ",
+        "B": "Addis Ababa",
+        "raw_output": "Addis Ababa"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Vietnam",
+      "raw_input": "The capital of Vietnam is ",
+      "B": "Hanoi",
+      "raw_output": "Hanoi"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Ontario",
+        "raw_input": "The capital of Ontario is ",
+        "B": "Toronto",
+        "raw_output": "Toronto"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Spain",
+      "raw_input": "The capital of Spain is ",
+      "B": "Madrid",
+      "raw_output": "Madrid"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Bangladesh",
+        "raw_input": "The capital of Bangladesh is ",
+        "B": "Dhaka",
+        "raw_output": "Dhaka"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Morocco",
+      "raw_input": "The capital of Morocco is ",
+      "B": "Rabat",
+      "raw_output": "Rabat"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Bangladesh",
+        "raw_input": "The capital of Bangladesh is ",
+        "B": "Dhaka",
+        "raw_output": "Dhaka"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Ohio",
+      "raw_input": "The capital of Ohio is ",
+      "B": "Columbus",
+      "raw_output": "Columbus"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Turkey",
+        "raw_input": "The capital of Turkey is ",
+        "B": "Ankara",
+        "raw_output": "Ankara"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "France",
+      "raw_input": "The capital of France is ",
+      "B": "Paris",
+      "raw_output": "Paris"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Belgium",
+        "raw_input": "The capital of Belgium is ",
+        "B": "Brussels",
+        "raw_output": "Brussels"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Finland",
+      "raw_input": "The capital of Finland is ",
+      "B": "Helsinki",
+      "raw_output": "Helsinki"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Pakistan",
+        "raw_input": "The capital of Pakistan is ",
+        "B": "Islamabad",
+        "raw_output": "Islamabad"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Ecuador",
+      "raw_input": "The capital of Ecuador is ",
+      "B": "Quito",
+      "raw_output": "Quito"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Argentina",
+        "raw_input": "The capital of Argentina is ",
+        "B": "Buenos Aires",
+        "raw_output": "Buenos Aires"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Saudi Arabia",
+      "raw_input": "The capital of Saudi Arabia is ",
+      "B": "Riyadh",
+      "raw_output": "Riyadh"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Israel",
+        "raw_input": "The capital of Israel is ",
+        "B": "Jerusalem",
+        "raw_output": "Jerusalem"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Algeria",
+      "raw_input": "The capital of Algeria is ",
+      "B": "Algiers",
+      "raw_output": "Algiers"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Japan",
+        "raw_input": "The capital of Japan is ",
+        "B": "Tokyo",
+        "raw_output": "Tokyo"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Iran",
+      "raw_input": "The capital of Iran is ",
+      "B": "Tehran",
+      "raw_output": "Tehran"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Italy",
+        "raw_input": "The capital of Italy is ",
+        "B": "Rome",
+        "raw_output": "Rome"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Spain",
+      "raw_input": "The capital of Spain is ",
+      "B": "Madrid",
+      "raw_output": "Madrid"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Poland",
+        "raw_input": "The capital of Poland is ",
+        "B": "Warsaw",
+        "raw_output": "Warsaw"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "China",
+      "raw_input": "The capital of China is ",
+      "B": "Beijing",
+      "raw_output": "Beijing"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Germany",
+        "raw_input": "The capital of Germany is ",
+        "B": "Berlin",
+        "raw_output": "Berlin"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Italy",
+      "raw_input": "The capital of Italy is ",
+      "B": "Rome",
+      "raw_output": "Rome"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Portugal",
+        "raw_input": "The capital of Portugal is ",
+        "B": "Lisbon",
+        "raw_output": "Lisbon"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Egypt",
+      "raw_input": "The capital of Egypt is ",
+      "B": "Cairo",
+      "raw_output": "Cairo"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Colombia",
+        "raw_input": "The capital of Colombia is ",
+        "B": "Bogot\u00e1",
+        "raw_output": "Bogot\u00e1"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Czech Republic",
+      "raw_input": "The capital of Czech Republic is ",
+      "B": "Prague",
+      "raw_output": "Prague"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Iraq",
+        "raw_input": "The capital of Iraq is ",
+        "B": "Baghdad",
+        "raw_output": "Baghdad"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "United Arab Emirates",
+      "raw_input": "The capital of United Arab Emirates is ",
+      "B": "Abu Dhabi",
+      "raw_output": "Abu Dhabi"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "United Kingdom",
+        "raw_input": "The capital of United Kingdom is ",
+        "B": "London",
+        "raw_output": "London"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "United Kingdom",
+      "raw_input": "The capital of United Kingdom is ",
+      "B": "London",
+      "raw_output": "London"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Russia",
+        "raw_input": "The capital of Russia is ",
+        "B": "Moscow",
+        "raw_output": "Moscow"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Israel",
+      "raw_input": "The capital of Israel is ",
+      "B": "Jerusalem",
+      "raw_output": "Jerusalem"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Denmark",
+        "raw_input": "The capital of Denmark is ",
+        "B": "Copenhagen",
+        "raw_output": "Copenhagen"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Pakistan",
+      "raw_input": "The capital of Pakistan is ",
+      "B": "Islamabad",
+      "raw_output": "Islamabad"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Turkey",
+        "raw_input": "The capital of Turkey is ",
+        "B": "Ankara",
+        "raw_output": "Ankara"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Saudi Arabia",
+      "raw_input": "The capital of Saudi Arabia is ",
+      "B": "Riyadh",
+      "raw_output": "Riyadh"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Bangladesh",
+        "raw_input": "The capital of Bangladesh is ",
+        "B": "Dhaka",
+        "raw_output": "Dhaka"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Czech Republic",
+      "raw_input": "The capital of Czech Republic is ",
+      "B": "Prague",
+      "raw_output": "Prague"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Colombia",
+        "raw_input": "The capital of Colombia is ",
+        "B": "Bogot\u00e1",
+        "raw_output": "Bogot\u00e1"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Austria",
+      "raw_input": "The capital of Austria is ",
+      "B": "Vienna",
+      "raw_output": "Vienna"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Germany",
+        "raw_input": "The capital of Germany is ",
+        "B": "Berlin",
+        "raw_output": "Berlin"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Norway",
+      "raw_input": "The capital of Norway is ",
+      "B": "Oslo",
+      "raw_output": "Oslo"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Ecuador",
+        "raw_input": "The capital of Ecuador is ",
+        "B": "Quito",
+        "raw_output": "Quito"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Iraq",
+      "raw_input": "The capital of Iraq is ",
+      "B": "Baghdad",
+      "raw_output": "Baghdad"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Argentina",
+        "raw_input": "The capital of Argentina is ",
+        "B": "Buenos Aires",
+        "raw_output": "Buenos Aires"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Saudi Arabia",
+      "raw_input": "The capital of Saudi Arabia is ",
+      "B": "Riyadh",
+      "raw_output": "Riyadh"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Turkey",
+        "raw_input": "The capital of Turkey is ",
+        "B": "Ankara",
+        "raw_output": "Ankara"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Ireland",
+      "raw_input": "The capital of Ireland is ",
+      "B": "Dublin",
+      "raw_output": "Dublin"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Poland",
+        "raw_input": "The capital of Poland is ",
+        "B": "Warsaw",
+        "raw_output": "Warsaw"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Japan",
+      "raw_input": "The capital of Japan is ",
+      "B": "Tokyo",
+      "raw_output": "Tokyo"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "California",
+        "raw_input": "The capital of California is ",
+        "B": "Sacramento",
+        "raw_output": "Sacramento"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Canada",
+      "raw_input": "The capital of Canada is ",
+      "B": "Ottawa",
+      "raw_output": "Ottawa"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Belgium",
+        "raw_input": "The capital of Belgium is ",
+        "B": "Brussels",
+        "raw_output": "Brussels"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Finland",
+      "raw_input": "The capital of Finland is ",
+      "B": "Helsinki",
+      "raw_output": "Helsinki"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "United Kingdom",
+        "raw_input": "The capital of United Kingdom is ",
+        "B": "London",
+        "raw_output": "London"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Romania",
+      "raw_input": "The capital of Romania is ",
+      "B": "Bucharest",
+      "raw_output": "Bucharest"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Egypt",
+        "raw_input": "The capital of Egypt is ",
+        "B": "Cairo",
+        "raw_output": "Cairo"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Ohio",
+      "raw_input": "The capital of Ohio is ",
+      "B": "Columbus",
+      "raw_output": "Columbus"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "California",
+        "raw_input": "The capital of California is ",
+        "B": "Sacramento",
+        "raw_output": "Sacramento"
+      }
+    ]
+  },
+  {
+    "input": {
+      "A": "Saudi Arabia",
+      "raw_input": "The capital of Saudi Arabia is ",
+      "B": "Riyadh",
+      "raw_output": "Riyadh"
+    },
+    "counterfactual_inputs": [
+      {
+        "A": "Virginia",
+        "raw_input": "The capital of Virginia is ",
+        "B": "Richmond",
+        "raw_output": "Richmond"
+      }
+    ]
+  }
+]
