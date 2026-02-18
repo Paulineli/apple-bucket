@@ -29,8 +29,6 @@ def build_causal_model(vocab, model_type = 'or_model'):
         values["op3"] = [True, False]
         values["op4"] = [True, False]
         values["op5"] = [True, False]
-        values["op6"] = [True, False]
-        values["op7"] = [True, False]
 
         parents = {
             "t0": [],
@@ -39,8 +37,6 @@ def build_causal_model(vocab, model_type = 'or_model'):
             "t3": [],
             "t4": [],
             "t5": [],
-            "t6": [],
-            "t7": [],
             "op1": ["t2", "t4"],
             "op2": ["t0", "t5"],
             "op3": ["t1", "t3"],
@@ -559,13 +555,7 @@ def make_counterfactual_dataset(
     base_code = 'TTT'):
     '''This function generates a counterfactual tokenized dataset. The output dataset is already filtered and tokenized.'''
 
-    if dataset_type == "fixed":
-        make_raw_data = make_counterfactual_dataset_fixed
-    elif dataset_type == "average":
-        make_raw_data = make_counterfactual_dataset_average
-    elif dataset_type == "fixed_f2t":
-        make_raw_data = make_counterfactual_dataset_ft
-    elif dataset_type == "all":
+    if dataset_type == "all":
         make_raw_data = make_counterfactual_dataset_all
     elif dataset_type == "all2":
         make_raw_data = make_counterfactual_dataset_all2
@@ -574,7 +564,7 @@ def make_counterfactual_dataset(
     elif dataset_type == "exhaustive2":
         make_raw_data = lambda equality_model, vocab, interv, data_size: make_counterfactual_dataset_exhaustive2(equality_model, vocab, interv, data_size, source_code, base_code)
     else:
-        raise ValueError("dataset_type should be one of ['fixed', 'average', 'fixed_f2t', 'all', 'exhaustive', 'exhaustive2']")
+        raise ValueError("dataset_type should be one of ['all', 'all2', 'exhaustive', 'exhaustive2']")
 
     dataset =  make_raw_data(equality_model, vocab, interv, data_size)
 

@@ -9,8 +9,10 @@ import pandas as pd
 import os
 
 
-def load_model(model_path_ft = "./ft_model/fine_tuned_gpt2_or"):
+def load_model(model_path_ft = "./fine_tuned_gpt2_or"):
     '''Load the model from the specified path or from Hugging Face if not found.'''
+    if model_path_ft is None:
+        model_path_ft = "./fine_tuned_gpt2_or"
     if os.path.exists(model_path_ft):
         print(f"Loading existing model from {model_path_ft}")
         model = GPT2LMHeadModel.from_pretrained(model_path_ft)

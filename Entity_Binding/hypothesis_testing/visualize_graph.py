@@ -54,8 +54,12 @@ def load_partition_results(partition_path: Optional[Path]) -> Optional[Dict]:
     with open(partition_path, 'r') as f:
         results = json.load(f)
     
-    labels = np.array(results.get('labels', []))
+    # Support both 'labels' and 'cluster_labels' keys (e.g. classifier filter results)
+    labels = np.array(results.get('labels', results.get('cluster_labels', [])))
     print(f"  Loaded partition with {len(np.unique(labels))} clusters")
+    # Normalize so downstream code can always use 'labels'
+    if 'labels' not in results and 'cluster_labels' in results:
+        results = {**results, 'labels': results['cluster_labels']}
     return results
 
 
@@ -172,14 +176,14 @@ def plot_network_layout(
     node_colors = None
     cluster_labels = None
     if partition_results is not None:
-        labels = np.array(partition_results.get('labels', []))
+        labels = np.array(partition_results.get('labels', partition_results.get('cluster_labels', [])))
         if len(labels) == n:
             unique_labels = np.unique(labels)
             # Create color map
             cmap = plt.colormaps.get_cmap('tab20')
             node_colors = [cmap(np.where(unique_labels == labels[i])[0][0] / len(unique_labels)) for i in range(n)]
             cluster_labels = labels
-    else:
+    if node_colors is None or cluster_labels is None:
         node_colors = 'lightblue'
     
     # Draw edges
@@ -511,7 +515,7 @@ def plot_cluster_analysis(
     output_path: Path
 ):
     """Plot cluster analysis including inter-cluster and intra-cluster edge densities."""
-    labels = np.array(partition_results.get('labels', []))
+    labels = np.array(partition_results.get('labels', partition_results.get('cluster_labels', [])))
     n = adj_matrix.shape[0]
     
     if len(labels) != n:
@@ -659,7 +663,7 @@ def print_statistics(stats: Dict, partition_results: Optional[Dict] = None):
         print("\n" + "-"*60)
         print("PARTITION INFORMATION")
         print("-"*60)
-        labels = np.array(partition_results.get('labels', []))
+        labels = np.array(partition_results.get('labels', partition_results.get('cluster_labels', [])))
         unique_labels = np.unique(labels)
         print(f"Number of clusters: {len(unique_labels)}")
         print(f"K parameter: {partition_results.get('K', 'N/A')}")

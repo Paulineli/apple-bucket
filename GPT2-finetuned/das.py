@@ -77,6 +77,7 @@ def DAS_training(intervenable, train_dataset, optimizer, pos, epochs = 5, batch_
     
     intervenable.model.train()  # set the module to train mode, which enables drop-off but no grads
     print("intervention trainable parameters: ", intervenable.count_parameters()) # count the number of trainable parameters in the intervention
+    device = next(intervenable.model.parameters()).device
 
     train_iterator = trange(0, int(epochs), desc="Epoch")  # create a progress bar for the epochs
     total_step = 0
@@ -101,7 +102,7 @@ def DAS_training(intervenable, train_dataset, optimizer, pos, epochs = 5, batch_
             batch_size = batch["input_ids"].shape[0]
             for k, v in batch.items():
                 if v is not None and isinstance(v, torch.Tensor):
-                    batch[k] = v.to("cuda")
+                    batch[k] = v.to(device)
 
             # Interchange intervention: Please pay attention to the shape. It can be tricky.
             _, counterfactual_outputs = intervenable(
@@ -148,6 +149,82 @@ def DAS_training(intervenable, train_dataset, optimizer, pos, epochs = 5, batch_
 
         epoch_iterator.close()  # Close inner progress bar after each epoch
 
+def _pad_and_stack(sequences, pad_token_id, left_pad=True):
+    """Pad a list of 1D or 2D tensors to the same length and stack. left_pad=True for causal LM (last pos = real token)."""
+    if not sequences:
+        return None
+    tensors = [s.squeeze() for s in sequences]
+    if tensors[0].dim() == 0:
+        return torch.stack(tensors)
+    max_len = max(t.size(-1) for t in tensors)
+    padded = []
+    for t in tensors:
+        if t.size(-1) < max_len:
+            pad_len = max_len - t.size(-1)
+            pad = torch.full((pad_len,) + t.shape[:-1], pad_token_id, dtype=t.dtype, device=t.device)
+            if left_pad:
+                t = torch.cat([pad, t], dim=-1)
+            else:
+                t = torch.cat([t, pad], dim=-1)
+        padded.append(t)
+    return torch.stack(padded)
+
+
+def das_test_batch_correctness(intervenable, pos, batch_list, device, intervention_type='das', pad_token_id=None):
+    """Run DAS on a list of tokenized examples and return per-example correctness.
+    Each element of batch_list is a dict with keys: input_ids, source_input_ids, labels (tensors).
+    Processes in a single batched forward when possible. Returns list of bool, same length as batch_list."""
+    if not batch_list:
+        return []
+    if pad_token_id is None and hasattr(intervenable, 'model') and hasattr(intervenable.model, 'config'):
+        pad_token_id = getattr(intervenable.model.config, 'pad_token_id', 0)
+    if pad_token_id is None:
+        pad_token_id = 0
+
+    with torch.no_grad():
+        # Batch: pad and stack
+        input_ids_list = [ex["input_ids"].to(device) for ex in batch_list]
+        source_list = [ex["source_input_ids"].to(device) for ex in batch_list]
+        labels_list = [ex["labels"].to(device) for ex in batch_list]
+
+        batched_input_ids = _pad_and_stack(input_ids_list, pad_token_id, left_pad=True)
+        batched_source = _pad_and_stack(source_list, pad_token_id, left_pad=True)
+        batch_size = batched_input_ids.shape[0]
+
+        # Target label: last token of each label sequence (next-token prediction)
+        target_labels = []
+        for lab in labels_list:
+            l = lab.squeeze()
+            if l.numel() == 1:
+                target_labels.append(l.item())
+            else:
+                target_labels.append(l.flatten()[-1].item())
+        target_labels = torch.tensor(target_labels, dtype=torch.long, device=device)
+
+        for k, v in [("input_ids", batched_input_ids), ("source", batched_source)]:
+            if v is not None and isinstance(v, torch.Tensor):
+                pass  # already on device
+        batched_input_ids = batched_input_ids.to(device)
+        batched_source = batched_source.to(device)
+
+        if intervention_type == 'das':
+            _, counterfactual_outputs = intervenable(
+                {"input_ids": batched_input_ids},
+                [{"input_ids": batched_source}],
+                {"sources->base": ([[[pos]] * batch_size], [[[pos]] * batch_size])},
+                subspaces=[[[0]] * batch_size],
+            )
+        else:
+            _, counterfactual_outputs = intervenable(
+                {"input_ids": batched_input_ids},
+                [{"input_ids": batched_source}],
+                {"sources->base": ([[[pos]] * batch_size], [[[pos]] * batch_size])},
+            )
+        preds = counterfactual_outputs.logits[:, -1, :].argmax(dim=-1)
+        correct = (preds == target_labels).cpu().tolist()
+    return correct
+
+
 def das_test(intervenable, pos, test_dataset, batch_size = 64, intervention_type = 'das'):
     ''' This function is used to test the model with the intervention.
     Input:
@@ -160,6 +237,7 @@ def das_test(intervenable, pos, test_dataset, batch_size = 64, intervention_type
     This function will test the model with the intervention, and compute the accuracy.'''
     eval_labels = []
     eval_preds = []
+    device = next(intervenable.model.parameters()).device
     with torch.no_grad():
         epoch_iterator = tqdm(
             DataLoader(
@@ -179,7 +257,7 @@ def das_test(intervenable, pos, test_dataset, batch_size = 64, intervention_type
             batch_size = batch["input_ids"].shape[0]
             for k, v in batch.items():
                 if v is not None and isinstance(v, torch.Tensor):
-                    batch[k] = v.to("cuda")
+                    batch[k] = v.to(device)
             
             if intervention_type == 'das':
                 _, counterfactual_outputs = intervenable(
@@ -338,6 +416,7 @@ def parallel_intervention(intervenable, poss, test_dataset, batch_size):
     eval_labels = []
     eval_preds = []
     n_blocks = len(poss)
+    device = next(intervenable.model.parameters()).device
     with torch.no_grad():
         epoch_iterator = tqdm(
             DataLoader(
@@ -357,7 +436,7 @@ def parallel_intervention(intervenable, poss, test_dataset, batch_size):
             batch_size = batch["input_ids"].shape[0]
             for k, v in batch.items():
                 if v is not None and isinstance(v, torch.Tensor):
-                    batch[k] = v.to("cuda")
+                    batch[k] = v.to(device)
 
             _, counterfactual_outputs = intervenable(
                 {"input_ids": batch["input_ids"]},
@@ -538,7 +617,12 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size", type=int, default=32, help="Batch size for dataset creation and evaluation")
     parser.add_argument("--subspace-dimension", type=int, default=1, help="Dimension of the subspace for intervention")
     parser.add_argument("--device", type=str, default=None, help="Device to use (e.g., 'cpu' or 'cuda'). If not set, auto-detects.")
+    parser.add_argument("--gpu", type=int, default=0, help="GPU index to use (e.g., 0, 1). Overridden by --device if both are set.")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
+    parser.add_argument("--layer", type=int, default=None, help="Layer index to use (default: all layers)")
+    parser.add_argument("--pos-num", type=int, default=None, help="Position index for intervention (default: range 76-81)")
+    parser.add_argument("--op-list", type=str, nargs="*", default=None,
+                        help="Override op_list for interventions (e.g. --op-list op5 or --op-list op4a op5a). If not set, uses default per causal model.")
     args = parser.parse_args()
 
     # Set random seed early for reproducibility
@@ -558,7 +642,12 @@ if __name__ == "__main__":
     
     # load trained model
     model, tokenizer = util_model.load_model()
-    device = args.device if args.device is not None else ('cuda' if torch.cuda.is_available() else 'cpu')
+    if args.device is not None:
+        device = args.device
+    elif args.gpu is not None:
+        device = f"cuda:{args.gpu}"
+    else:
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f"Using device: {device}")
     model = model.to(device)
     if device.startswith("cuda") and torch.cuda.is_available():
@@ -571,29 +660,43 @@ if __name__ == "__main__":
     weights = {}
 
     # Train/test common params
-    poss = range(76, 82) 
-    layers = range(model.config.n_layer)
+    poss = [args.pos_num] if args.pos_num is not None else range(76, 82)
+    layers = [args.layer] if args.layer is not None else range(model.config.n_layer)
 
     if args.causal_model == "1":
-        op_list = ["op1", "op2", "op3", "op4"]
+        default_op_list = ["op5"]
         data_generator = "all"
         out_op = "op5"
     elif args.causal_model == "2":
-        op_list = ["op4a", "op5a"]
+        default_op_list = ["op4a", "op5a"]
         data_generator = "all2"
         out_op = "op6a"
+    op_list = args.op_list if args.op_list is not None and len(args.op_list) > 0 else default_op_list
+    print(f"Using op_list: {op_list}")
     causal_model_tag = f"or_model_{args.causal_model}"
     intervention_type = args.intervention_type
     subspace_dimension=args.subspace_dimension
 
     if args.train:
         print("Starting training (finding candidate alignments)")
+        # Load existing results so we append instead of overwriting
+        candidates_path = f"training_results/candidates_{intervention_type}_{causal_model_tag}_dim{subspace_dimension}.json"
+        weights_path = f"training_results/das_weights_{intervention_type}_{causal_model_tag}_dim{subspace_dimension}.pt"
         candidates_total = {}
         das_weights = {}
+        if os.path.exists(candidates_path):
+            with open(candidates_path, "r") as f:
+                candidates_total = json.load(f)
+            print(f"Loaded existing candidates from {candidates_path}")
+        if os.path.exists(weights_path):
+            das_weights = torch.load(weights_path)
+            print(f"Loaded existing weights from {weights_path}")
 
         for intervention in op_list:
-            candidates_total[intervention] = {}
-            das_weights[intervention] = {}
+            if intervention not in candidates_total:
+                candidates_total[intervention] = {}
+            if intervention not in das_weights:
+                das_weights[intervention] = {}
             dataset = util_data.make_counterfactual_dataset(
                 data_generator,
                 intervention,
@@ -623,16 +726,15 @@ if __name__ == "__main__":
             candidates_total[intervention].update(candidate)
             das_weights[intervention].update(weight)
 
-        # persist results
+        # persist results (append: existing results were loaded above and merged with new run)
         os.makedirs("training_results", exist_ok=True)
         intervention_type = 'das'
-        with open(f"training_results/candidates_{intervention_type}_{causal_model_tag}_dim{subspace_dimension}.json", "w") as f:
+        with open(candidates_path, "w") as f:
             json.dump(candidates_total, f, indent=4)
-        print(f"Candidate alignments saved to training_results/candidates_{intervention_type}_{causal_model_tag}_dim{subspace_dimension}.json")
+        print(f"Candidate alignments saved to {candidates_path}")
 
-        with open(f"training_results/das_weights_{intervention_type}_{causal_model_tag}_dim{subspace_dimension}.pt", "wb") as f:
-            torch.save(das_weights, f)
-        print(f"DAS weights saved to training_results/das_weights_{intervention_type}_{causal_model_tag}_dim{subspace_dimension}.pt")
+        torch.save(das_weights, weights_path)
+        print(f"DAS weights saved to {weights_path}")
 
     elif args.test:
         print("Starting testing using provided weights and candidates")
@@ -650,7 +752,7 @@ if __name__ == "__main__":
         test_results = {}
 
         if args.causal_model == "1":
-            data_generator = "exhaustive"
+            data_generator = "all"
 
         elif args.causal_model == "2":
             data_generator = "exhaustive2"
@@ -682,8 +784,17 @@ if __name__ == "__main__":
                 candidates = candidates_total.get(intervention, {})
                 weights_for_intervention = das_weights.get(intervention, {}) if isinstance(das_weights, dict) else das_weights
 
+                # Optionally restrict to selected layer/pos_num
+                candidate_keys = list(candidates.keys())
+                if args.layer is not None and args.pos_num is not None:
+                    selected_key = f"L{args.layer}_P{args.pos_num}"
+                    if selected_key in candidate_keys:
+                        candidate_keys = [selected_key]
+                    else:
+                        print(f"Warning: candidate {selected_key} not in candidates; evaluating all")
+
                 results = {}
-                for candidate in candidates.keys():
+                for candidate in candidate_keys:
                     layer, pos = extract_layer_pos(candidate)
                     weight = weights_for_intervention.get(candidate)
                     if weight is None:
