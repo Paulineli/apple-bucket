@@ -1,0 +1,62 @@
+{
+  "n_features": 2304,
+  "cluster_0_specific_features": [],
+  "top_features_by_difference": [],
+  "classifier_results": {
+    "top_feature_indices": null,
+    "n_features_used": 10,
+    "n_nonzero_features": 10,
+    "train_accuracy": 0.9012345679012346,
+    "test_accuracy": 0.9215686274509803,
+    "n_train_samples": 405,
+    "n_test_samples": 102,
+    "classification_report": {
+      "Cluster 0": {
+        "precision": 0.90625,
+        "recall": 0.8529411764705882,
+        "f1-score": 0.8787878787878788,
+        "support": 34.0
+      },
+      "Cluster 1": {
+        "precision": 0.9285714285714286,
+        "recall": 0.9558823529411765,
+        "f1-score": 0.9420289855072463,
+        "support": 68.0
+      },
+      "accuracy": 0.9215686274509803,
+      "macro avg": {
+        "precision": 0.9174107142857143,
+        "recall": 0.9044117647058824,
+        "f1-score": 0.9104084321475625,
+        "support": 102.0
+      },
+      "weighted avg": {
+        "precision": 0.9211309523809523,
+        "recall": 0.9215686274509803,
+        "f1-score": 0.9209486166007904,
+        "support": 102.0
+      }
+    },
+    "cluster_0_id": 0,
+    "cluster_1_id": 1,
+    "mode": "pca-l1",
+    "n_components": 10,
+    "C": 0.01,
+    "max_iter": 1000,
+    "variance_explained": 0.7388413548469543
+  },
+  "metadata": {
+    "model": "google/gemma-2-2b-it",
+    "layer": 15,
+    "dataset_path": "hypothesis_testing/partition_results/filtered_input_samples_filling_liquids_15_10_512_google_gemma-2-2b-it.pkl",
+    "partition_results_path": "hypothesis_testing/partition_results/partition_results_filling_liquids_15_10_512_google_gemma-2-2b-it.json",
+    "threshold": 0.0,
+    "sae_path": "auto-detected",
+    "non_zero_features": 10,
+    "classifier_mode": "pca-l1",
+    "Precision_Cluster_0": 0.90625,
+    "Recall_Cluster_0": 0.8529411764705882,
+    "Precision_Cluster_1": 0.9285714285714286,
+    "Recall_Cluster_1": 0.9558823529411765
+  }
+}

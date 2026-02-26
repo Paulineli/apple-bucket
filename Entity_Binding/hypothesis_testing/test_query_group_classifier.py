@@ -24,7 +24,7 @@ from tqdm import tqdm
 
 # Add causalab and hypothesis_testing to path
 _script_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(_script_dir, '..', 'causalab'))
+sys.path.insert(0, os.path.join(_script_dir, '..', '..', 'causalab'))
 if _script_dir not in sys.path:
     sys.path.insert(0, _script_dir)
 

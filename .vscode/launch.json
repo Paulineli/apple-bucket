@@ -5,40 +5,6 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python Debugger: Current File with Arguments",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${file}",
-            "console": "integratedTerminal",
-            "args": "${command:pickArgs}"
-        },
-        {
-            "name": "Debug run_das.py (Quick Test - Minimal)",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/Entity_Binding/hypothesis_testing/run_das.py",
-            "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/Entity_Binding",
-            "args": [
-                "--model", "Qwen/Qwen3-8B",
-                "--test",
-                "--size", "8",
-                "--batch-size", "4",
-                "--num-groups", "5",
-                "--n-features", "16",
-                "--min-accuracy", "0.5",
-                "--gpu", "0",
-                "--output", "hypothesis_testing/outputs/debug_quick"
-            ],
-            "justMyCode": false,
-            "env": {
-                "PYTHONPATH": "${workspaceFolder}/Entity_Binding",
-                "PATH": "/home/jytan12/causal_abs_cs224n/causal_abs/bin:${env:PATH}",
-                "VIRTUAL_ENV": "/home/jytan12/causal_abs_cs224n/causal_abs",
-                "PYTHON": "/usr/bin/python3"
-            }
-        },
-        {
             "name": "Debug run_das.py (Full Dataset)",
             "type": "debugpy",
             "request": "launch",
@@ -80,6 +46,57 @@
             "justMyCode": false,
             "env": {
                 "PYTHONPATH": "bin/python3.8",
+            },
+        },
+        {
+            "name": "Debug analyze_sae_features.py (Full Dataset)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/Entity_Binding/hypothesis_testing/analyze_sae_features.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/Entity_Binding",
+            "args": [
+                "--dataset-path", "hypothesis_testing/partition_results/filtered_input_samples_filling_liquids_15_10_512_google_gemma-2-2b-it.pkl",
+                "--partition-results-path", "hypothesis_testing/partition_results/partition_results_filling_liquids_15_10_512_google_gemma-2-2b-it.json",
+                "--layer", "15",
+                "--model", "google/gemma-2-2b-it",
+                "--gpu", "0",
+                "--save-classifier", "hypothesis_testing/partition_results/PCA_results/pca_analysis_layer_15.pkl",
+                "--classifier-mode", "pca-l1",
+                "--pca-n-components", "10",
+                "--full-l1-C", "0.01",
+                "--output", "hypothesis_testing/partition_results/PCA_results/pca_analysis_layer_15.json"
+            ],
+            "justMyCode": false,
+            "subProcess": false,
+            "env": {
+                "PYTHONPATH": "bin/python3.8",
+                "TOKENIZERS_PARALLELISM": "false"
+            },
+        },
+        {
+            "name": "Debug test_sae_classifier.py (PCA)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/Entity_Binding/hypothesis_testing/test_sae_classifier.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "args": [
+                "--classifier-path", "Entity_Binding/hypothesis_testing/partition_results/PCA_results/pca_analysis_layer_15.pkl",
+                "--task", "filling_liquids",
+                "--layer", "15",
+                "--model", "google/gemma-2-2b-it",
+                "--gpu", "0",
+                "--num-groups", "10",
+                "--filtered-dataset-path", "Entity_Binding/hypothesis_testing/classifier_filter_results/filtered_dataset_filling_liquids_15_10_200_google_gemma-2-2b-it.pkl",
+                "--graph-path", "Entity_Binding/hypothesis_testing/classifier_filter_results/graph_whole_filling_liquids_15_10_200_google_gemma-2-2b-it.pkl",
+                "--output-dir", "Entity_Binding/hypothesis_testing/partition_results/PCA_results",
+            ],
+            "justMyCode": false,
+            "subProcess": false,
+            "env": {
+                "PYTHONPATH": "bin/python3.8",
+                "TOKENIZERS_PARALLELISM": "false"
             },
         }
     ]

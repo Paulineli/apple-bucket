@@ -452,7 +452,7 @@ def make_counterfactual_dataset_all(causal_model, vocab, intervention:str, sampl
             t2 = t4
         if random.random() < 0.5:
             t0 = t5
-        if random.random() < 0.5:
+        if random.random() < 0.2:
             t1 = t3
 
         p, q, r= (t2 != t4), (t0 != t5), (t1 == t3)
@@ -472,7 +472,7 @@ def make_counterfactual_dataset_all(causal_model, vocab, intervention:str, sampl
         # truth values of ps, qs, rs randomized
         t5s = t0s if random.random() < 0.5 else random.choice(vocab)
         t2s = t4s if random.random() < 0.5 else random.choice(vocab)
-        t1s = t3s if random.random() < 0.5 else random.choice(vocab)
+        t1s = t3s if random.random() < 0.2 else random.choice(vocab)
 
         source_id = {"t0": t0s,"t1": t1s, "t2": t2s, "t3": t3s, "t4": t4s, "t5": t5s}
 

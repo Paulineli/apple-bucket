@@ -30,7 +30,7 @@ networkx
 # Optional but commonly used
 tensorboard
 
-# Note: The causalab package should be installed from the parent directory
-# Install it with: pip install -e ../causalab
-# Or ensure it's in your Python path (run_das.py adds ../causalab to sys.path)
+# Note: The causalab package is at the project root (Multi_Variable_Causal_Abstraction/causalab)
+# Install it with: pip install -e causalab  (from project root)
+# Or ensure it's in your Python path (scripts add ../../causalab to sys.path when run from hypothesis_testing)
 

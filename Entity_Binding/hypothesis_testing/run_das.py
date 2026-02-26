@@ -39,7 +39,7 @@ from pathlib import Path
 from typing import Dict, Any, Tuple, Callable
 
 # Add the causalab package to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'causalab'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'causalab'))
 
 from causalab.tasks.entity_binding.config import (
     EntityBindingTaskConfig, 

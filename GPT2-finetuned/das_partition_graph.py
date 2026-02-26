@@ -349,12 +349,14 @@ def main():
         if len(graph_dataset) == 0:
             raise ValueError("No samples in graph_dataset after filtering.")
         save_path = output_dir / f"graph_dataset_{args.data_size}_{intervention}.pkl"
-        with open(save_path, "wb") as f:
-            pickle.dump(graph_dataset, f)
-        print(f"Saved graph_dataset to {save_path} (size={len(graph_dataset)})")
+       
         if args.graph_dataset_path:
             with open(args.graph_dataset_path, "wb") as f:
                 pickle.dump(graph_dataset, f)
+        else:
+            with open(save_path, "wb") as f:
+                pickle.dump(graph_dataset, f)
+        print(f"Saved graph_dataset to {args.graph_dataset_path if args.graph_dataset_path else save_path} (size={len(graph_dataset)})")
 
     n = len(graph_dataset)
 
@@ -403,12 +405,13 @@ def main():
             intervention_type="das",
         )
         graph_save = output_dir / f"graph_das_L{args.layer}_P{args.pos_num}_{args.data_size}_{intervention}.pkl"
-        with open(graph_save, "wb") as f:
-            pickle.dump(adj_matrix, f)
-        print(f"Saved graph to {graph_save} (nodes={n}, edges={int(np.sum(adj_matrix))//2})")
         if args.graph_path:
             with open(args.graph_path, "wb") as f:
                 pickle.dump(adj_matrix, f)
+        else:
+            with open(graph_save, "wb") as f:
+                pickle.dump(adj_matrix, f)
+        print(f"Saved graph to {graph_save if args.graph_path else args.graph_path} (nodes={n}, edges={int(np.sum(adj_matrix))//2})")
 
     # ----- 3. Partition -----
     print(f"Partitioning graph (K={args.K}, gamma={args.gamma})...")

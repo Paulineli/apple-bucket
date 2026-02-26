@@ -54,7 +54,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Add the causalab package to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'causalab'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'causalab'))
 
 from causalab.tasks.entity_binding.config import (
     EntityBindingTaskConfig, 

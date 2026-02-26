@@ -22,6 +22,8 @@ from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, classification_report
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
 import joblib
 
 # Print diagnostic info about Python environment (helpful for debugging import issues)
@@ -31,7 +33,7 @@ if __name__ == "__main__" and len(sys.argv) > 1 and "--help" not in sys.argv:
 
 # Add causalab to path
 _script_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(_script_dir, '..', 'causalab'))
+sys.path.insert(0, os.path.join(_script_dir, '..', '..', 'causalab'))
 
 from causalab.tasks.entity_binding.config import (
     EntityBindingTaskConfig,
@@ -424,8 +426,8 @@ def analyze_features_by_cluster(
     cluster_1_features = feature_activations[cluster_1_indices]  # (n_cluster1, n_features)
     
     # Compute mean activation per feature for each cluster
-    cluster_0_mean = cluster_0_features.mean(dim=0).cpu().numpy()  # (n_features,)
-    cluster_1_mean = cluster_1_features.mean(dim=0).cpu().numpy()  # (n_features,)
+    cluster_0_mean = cluster_0_features.mean(dim=0).float().cpu().numpy()  # (n_features,)
+    cluster_1_mean = cluster_1_features.mean(dim=0).float().cpu().numpy()  # (n_features,)
     
     # Compute fraction of samples where feature fires (above threshold)
     cluster_0_firing = (cluster_0_features > threshold).float().mean(dim=0).cpu().numpy()
@@ -491,7 +493,7 @@ def train_cluster_classifier(
     """
     # Convert to numpy
     labels = np.array(labels)
-    feature_activations = feature_activations.cpu().numpy()
+    feature_activations = feature_activations.cpu().float().numpy()
     
     # Filter to only samples from the two clusters
     cluster_mask = (labels == cluster_0_id) | (labels == cluster_1_id)
@@ -579,7 +581,7 @@ def train_cluster_classifier_full_l1(
     """
     # Convert to numpy
     labels = np.array(labels)
-    feature_activations = feature_activations.cpu().numpy()
+    feature_activations = feature_activations.cpu().float().numpy()
     
     # Filter to only samples from the two clusters
     cluster_mask = (labels == cluster_0_id) | (labels == cluster_1_id)
@@ -658,12 +660,137 @@ def train_cluster_classifier_full_l1(
     return results
 
 
+def train_cluster_classifier_pca_l1(
+    activations: torch.Tensor,
+    labels: List[int],
+    cluster_0_id: int,
+    cluster_1_id: int,
+    n_components: int,
+    test_size: float = 0.2,
+    random_state: int = 42,
+    C: float = 1.0,
+    max_iter: int = 1000,
+) -> Dict:
+    """
+    Train a classifier using PCA-reduced activations with logistic regression.
+
+    Uses raw model activations, reduces dimensionality via PCA to a user-specified number
+    of components, then trains logistic regression for cluster classification.
+    No L1 regularization needed since PCA output is low-dimensional.
+
+    Args:
+        activations: Tensor of shape (n_samples, hidden_dim) with raw model activations
+        labels: List of cluster labels for each sample
+        cluster_0_id: ID of first cluster
+        cluster_1_id: ID of second cluster
+        n_components: Number of PCA components (features) to use
+        test_size: Fraction of data to use for testing
+        random_state: Random seed for reproducibility
+        C: Inverse regularization strength for L2 (smaller = stronger regularization)
+        max_iter: Max iterations for logistic regression
+
+    Returns:
+        Dictionary with classification results, including pca and scaler for later use
+    """
+    # Convert to numpy
+    labels = np.array(labels)
+    X_raw = activations.cpu().float().numpy()
+
+    # Filter to only samples from the two clusters
+    cluster_mask = (labels == cluster_0_id) | (labels == cluster_1_id)
+    X = X_raw[cluster_mask]
+    y = labels[cluster_mask]
+
+    # Convert cluster IDs to binary labels (0 for cluster_0_id, 1 for cluster_1_id)
+    y_binary = (y == cluster_1_id).astype(int)
+
+    # Ensure n_components does not exceed min(n_samples, n_features)
+    n_samples, n_features = X.shape
+    n_components = min(n_components, n_samples - 1, n_features)
+
+    print(f"\nTraining PCA + logistic regression classifier...")
+    print(f"  Raw feature dim: {n_features}")
+    print(f"  PCA components: {n_components}")
+    print(f"  Total samples: {len(X)}")
+    print(f"  Using C={C} (L2 regularization)")
+
+    # Standardize before PCA (recommended)
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    # Fit PCA on training data only (we'll split first to avoid data leakage)
+    X_train_raw, X_test_raw, y_train, y_test = train_test_split(
+        X_scaled,
+        y_binary,
+        test_size=test_size,
+        random_state=random_state,
+        stratify=y_binary
+    )
+
+    pca = PCA(n_components=n_components, random_state=random_state)
+    X_train_pca = pca.fit_transform(X_train_raw)
+    X_test_pca = pca.transform(X_test_raw)
+
+    print(f"  Train samples: {len(X_train_pca)}")
+    print(f"  Test samples: {len(X_test_pca)}")
+    print(f"  Variance explained by {n_components} components: {pca.explained_variance_ratio_.sum():.4f}")
+
+    # Logistic regression (L2 default; no L1 needed for low-dim PCA features)
+    classifier = LogisticRegression(
+        C=C,
+        max_iter=max_iter,
+        random_state=random_state,
+        n_jobs=-1,
+    )
+    classifier.fit(X_train_pca, y_train)
+
+    # Evaluate
+    y_pred = classifier.predict(X_test_pca)
+    test_accuracy = accuracy_score(y_test, y_pred)
+    y_train_pred = classifier.predict(X_train_pca)
+    train_accuracy = accuracy_score(y_train, y_train_pred)
+
+    report = classification_report(
+        y_test,
+        y_pred,
+        target_names=[f"Cluster {cluster_0_id}", f"Cluster {cluster_1_id}"],
+        output_dict=True
+    )
+
+    n_nonzero = int(np.count_nonzero(classifier.coef_))
+
+    results = {
+        "top_feature_indices": None,
+        "n_features_used": n_components,
+        "n_nonzero_features": n_nonzero,
+        "train_accuracy": float(train_accuracy),
+        "test_accuracy": float(test_accuracy),
+        "n_train_samples": len(X_train_pca),
+        "n_test_samples": len(X_test_pca),
+        "classification_report": report,
+        "cluster_0_id": cluster_0_id,
+        "cluster_1_id": cluster_1_id,
+        "classifier": classifier,
+        "pca": pca,
+        "scaler": scaler,
+        "mode": "pca-l1",
+        "n_components": n_components,
+        "C": C,
+        "max_iter": max_iter,
+        "variance_explained": float(pca.explained_variance_ratio_.sum()),
+    }
+
+    return results
+
+
 def save_classifier(
     classifier: LogisticRegression,
     top_feature_indices: List[int],
     cluster_0_id: int,
     cluster_1_id: int,
-    save_path: str
+    save_path: str,
+    pca=None,
+    scaler=None,
 ) -> None:
     """
     Save classifier and metadata to disk.
@@ -674,13 +801,24 @@ def save_classifier(
         cluster_0_id: ID of first cluster
         cluster_1_id: ID of second cluster
         save_path: Path to save classifier (will save as .pkl file)
+        pca: Optional PCA object (for pca-l1 mode)
+        scaler: Optional StandardScaler object (for pca-l1 mode)
     """
     save_path = Path(save_path)
     save_path.parent.mkdir(parents=True, exist_ok=True)
+    base = save_path.with_suffix('')
     
     # Save classifier
-    classifier_path = save_path.with_suffix('.pkl')
+    classifier_path = base.with_suffix('.pkl')
     joblib.dump(classifier, classifier_path)
+    
+    # Save PCA and scaler if provided (pca-l1 mode)
+    if pca is not None:
+        joblib.dump(pca, base.with_name(base.name + '_pca').with_suffix('.pkl'))
+        print(f"PCA saved to: {base.with_name(base.name + '_pca').with_suffix('.pkl')}")
+    if scaler is not None:
+        joblib.dump(scaler, base.with_name(base.name + '_scaler').with_suffix('.pkl'))
+        print(f"Scaler saved to: {base.with_name(base.name + '_scaler').with_suffix('.pkl')}")
     
     # Save metadata
     metadata = {
@@ -688,8 +826,9 @@ def save_classifier(
         "cluster_0_id": cluster_0_id,
         "cluster_1_id": cluster_1_id,
         "n_features": len(top_feature_indices) if top_feature_indices is not None else int(classifier.coef_.shape[1]),
+        "mode": "pca-l1" if (pca is not None and scaler is not None) else None,
     }
-    metadata_path = save_path.with_suffix('.json')
+    metadata_path = base.with_suffix('.json')
     with open(metadata_path, 'w') as f:
         json.dump(metadata, f, indent=2)
     
@@ -701,11 +840,15 @@ def load_classifier(classifier_path: str) -> Tuple[LogisticRegression, Dict]:
     """
     Load classifier and metadata from disk.
     
+    For pca-l1 mode, also loads PCA and scaler from companion files
+    (base_pca.pkl and base_scaler.pkl) and adds them to metadata.
+    
     Args:
         classifier_path: Path to classifier .pkl file
         
     Returns:
-        Tuple of (classifier, metadata_dict)
+        Tuple of (classifier, metadata_dict). For pca-l1 mode, metadata
+        includes "pca" and "scaler" keys.
     """
     classifier_path = Path(classifier_path)
     if not classifier_path.exists():
@@ -720,7 +863,28 @@ def load_classifier(classifier_path: str) -> Tuple[LogisticRegression, Dict]:
         raise FileNotFoundError(f"Metadata file not found: {metadata_path}")
     
     with open(metadata_path, 'r') as f:
-        metadata = json.load(f)
+        raw = json.load(f)
+    
+    # Handle both formats: (1) direct metadata from save_classifier, or
+    # (2) full results from main() where classifier metadata is under "classifier_results"
+    if "classifier_results" in raw:
+        metadata = raw["classifier_results"].copy()
+        if "n_features" not in metadata and "n_features_used" in metadata:
+            metadata["n_features"] = metadata["n_features_used"]
+    else:
+        metadata = raw.copy()
+    
+    # Load PCA and scaler for pca-l1 mode
+    if metadata.get("mode") == "pca-l1":
+        base = classifier_path.with_suffix('')
+        pca_path = base.with_name(base.name + '_pca').with_suffix('.pkl')
+        scaler_path = base.with_name(base.name + '_scaler').with_suffix('.pkl')
+        if not pca_path.exists():
+            raise FileNotFoundError(f"PCA file not found for pca-l1 mode: {pca_path}")
+        if not scaler_path.exists():
+            raise FileNotFoundError(f"Scaler file not found for pca-l1 mode: {scaler_path}")
+        metadata["pca"] = joblib.load(pca_path)
+        metadata["scaler"] = joblib.load(scaler_path)
     
     return classifier, metadata
 
@@ -799,17 +963,24 @@ def main():
     parser.add_argument(
         "--classifier-mode",
         type=str,
-        choices=["top-k", "full-l1"],
+        choices=["top-k", "full-l1", "pca-l1"],
         default="top-k",
         help="How to train the cluster classifier: "
              "'top-k' uses the top 10 SAE features by firing difference; "
-             "'full-l1' uses the full SAE feature vector with L1-regularized logistic regression."
+             "'full-l1' uses the full SAE feature vector with L1-regularized logistic regression; "
+             "'pca-l1' uses PCA on raw activations (no SAE) with L1-regularized logistic regression."
+    )
+    parser.add_argument(
+        "--pca-n-components",
+        type=int,
+        default=50,
+        help="Number of PCA components to use when --classifier-mode pca-l1 (default: 50)."
     )
     parser.add_argument(
         "--full-l1-C",
         type=float,
         default=0.01,
-        help="Inverse regularization strength C for full-vector L1 logistic regression "
+        help="Inverse regularization strength C for full-vector or PCA L1 logistic regression "
              "(smaller C means stronger L1 regularization; default=0.01)."
     )
     
@@ -835,11 +1006,11 @@ def main():
         print("=" * 70)
         return 0
     
-    # Check SAE availability early and provide helpful diagnostics
-    if not SAE_LENS_AVAILABLE:
+    # Check SAE availability (only required for top-k and full-l1 modes)
+    if args.classifier_mode != "pca-l1" and not SAE_LENS_AVAILABLE:
         import sys
         print("=" * 70)
-        print("ERROR: sae_lens is not available")
+        print("ERROR: sae_lens is not available (required for --classifier-mode top-k and full-l1)")
         print("=" * 70)
         print(f"Python executable: {sys.executable}")
         print(f"Python version: {sys.version}")
@@ -847,7 +1018,7 @@ def main():
         print("1. Make sure your virtual environment is activated")
         print("2. Verify installation: pip show sae-lens")
         print("3. Try reinstalling: pip install --upgrade sae-lens")
-        print("4. Check if you're using the correct Python interpreter")
+        print("4. Or use --classifier-mode pca-l1 to skip SAE (uses PCA on raw activations)")
         print("\nTo check which Python you're using, run:")
         print(f"  {sys.executable} -m pip list | grep sae")
         print("=" * 70)
@@ -920,19 +1091,18 @@ def main():
     pipeline.tokenizer.padding_side = "left"
     print("  Model loaded")
     
-    # Load SAE
-    print(f"\nLoading SAE for layer {args.layer}...")
-    sae = load_sae(args.model, args.layer, device=device, sae_path=args.sae_path)
-    
-    # Get number of features
-    if hasattr(sae, 'cfg') and hasattr(sae.cfg, 'd_sae'):
-        n_features = sae.cfg.d_sae
-    elif hasattr(sae, 'W_enc'):
-        n_features = sae.W_enc.shape[0]  # Number of features
-    else:
-        n_features = "unknown"
-    
-    print(f"  SAE has {n_features} features")
+    # Load SAE (skip for pca-l1 mode)
+    sae = None
+    if args.classifier_mode != "pca-l1":
+        print(f"\nLoading SAE for layer {args.layer}...")
+        sae = load_sae(args.model, args.layer, device=device, sae_path=args.sae_path)
+        if hasattr(sae, 'cfg') and hasattr(sae.cfg, 'd_sae'):
+            n_features = sae.cfg.d_sae
+        elif hasattr(sae, 'W_enc'):
+            n_features = sae.W_enc.shape[0]
+        else:
+            n_features = "unknown"
+        print(f"  SAE has {n_features} features")
     
     # Get task type and num_groups from partition results
     task_type = partition_results.get("task", "filling_liquids")
@@ -956,74 +1126,93 @@ def main():
     if activations.device != device:
         activations = activations.to(device)
     
-    # Analyze features
-    print(f"\nAnalyzing SAE features across clusters...")
-    results = analyze_features_by_cluster(
-        activations,
-        labels,
-        sae,
-        cluster_0_id=cluster_0_id,
-        cluster_1_id=cluster_1_id,
-        threshold=args.threshold
-    )
+    # Analyze SAE features (skip for pca-l1 mode)
+    if args.classifier_mode != "pca-l1":
+        print(f"\nAnalyzing SAE features across clusters...")
+        results = analyze_features_by_cluster(
+            activations,
+            labels,
+            sae,
+            cluster_0_id=cluster_0_id,
+            cluster_1_id=cluster_1_id,
+            threshold=args.threshold
+        )
+        print(f"\nResults:")
+        print(f"  Total features: {results['n_features']}")
+        print(f"  Cluster 0 specific features: {len(results['cluster_0_specific_features'])}")
+        print(f"  Top 10 features by firing difference:")
+        for i, feat_idx in enumerate(results['top_features_by_difference'][:10]):
+            firing_diff = results['firing_diff'][feat_idx]
+            cluster_0_firing = results['cluster_0_firing_rates'][feat_idx]
+            cluster_1_firing = results['cluster_1_firing_rates'][feat_idx]
+            print(f"    Feature {feat_idx}: diff={firing_diff:.3f}, "
+                  f"cluster_0={cluster_0_firing:.3f}, cluster_1={cluster_1_firing:.3f}")
+    else:
+        results = {
+            "n_features": activations.shape[1],
+            "cluster_0_specific_features": [],
+            "top_features_by_difference": [],
+        }
     
-    print(f"\nResults:")
-    print(f"  Total features: {results['n_features']}")
-    print(f"  Cluster 0 specific features: {len(results['cluster_0_specific_features'])}")
-    print(f"  Top 10 features by firing difference:")
-    for i, feat_idx in enumerate(results['top_features_by_difference'][:10]):
-        firing_diff = results['firing_diff'][feat_idx]
-        cluster_0_firing = results['cluster_0_firing_rates'][feat_idx]
-        cluster_1_firing = results['cluster_1_firing_rates'][feat_idx]
-        print(f"    Feature {feat_idx}: diff={firing_diff:.3f}, "
-              f"cluster_0={cluster_0_firing:.3f}, cluster_1={cluster_1_firing:.3f}")
-    
-    # Train classifier using top 10 features
+    # Train classifier
     print(f"\n" + "=" * 70)
     print("Training Cluster Classifier")
     print("=" * 70)
     
-    # Re-encode activations to get SAE feature activations (needed for classifier)
-    print("Encoding activations for classifier...")
-    with torch.no_grad():
-        device = next(sae.parameters()).device
-        activations_for_sae = activations.to(device)
-        sae_output = sae.encode(activations_for_sae)
-        
-        # Handle different return types
-        if hasattr(sae_output, 'feature_acts'):
-            feature_activations = sae_output.feature_acts
-        elif isinstance(sae_output, torch.Tensor):
-            feature_activations = sae_output
-        elif isinstance(sae_output, tuple):
-            feature_activations = sae_output[0]
-        else:
-            raise ValueError(f"Unexpected SAE output type: {type(sae_output)}")
-    
-    # Train classifier according to selected mode
-    if args.classifier_mode == "top-k":
-        # Get top 10 features
-        top_10_features = results['top_features_by_difference'][:10]
-        classifier_results = train_cluster_classifier(
-            feature_activations,
-            labels,
-            top_10_features,
-            cluster_0_id=cluster_0_id,
-            cluster_1_id=cluster_1_id
-        )
-    else:
-        classifier_results = train_cluster_classifier_full_l1(
-            feature_activations,
+    if args.classifier_mode == "pca-l1":
+        classifier_results = train_cluster_classifier_pca_l1(
+            activations,
             labels,
             cluster_0_id=cluster_0_id,
             cluster_1_id=cluster_1_id,
+            n_components=args.pca_n_components,
             C=args.full_l1_C,
         )
+    else:
+        # Re-encode activations to get SAE feature activations (needed for classifier)
+        print("Encoding activations for classifier...")
+        with torch.no_grad():
+            device_sae = next(sae.parameters()).device
+            activations_for_sae = activations.to(device_sae)
+            sae_output = sae.encode(activations_for_sae)
+            
+            # Handle different return types
+            if hasattr(sae_output, 'feature_acts'):
+                feature_activations = sae_output.feature_acts
+            elif isinstance(sae_output, torch.Tensor):
+                feature_activations = sae_output
+            elif isinstance(sae_output, tuple):
+                feature_activations = sae_output[0]
+            else:
+                raise ValueError(f"Unexpected SAE output type: {type(sae_output)}")
+        
+        if args.classifier_mode == "top-k":
+            top_10_features = results['top_features_by_difference'][:10]
+            classifier_results = train_cluster_classifier(
+                feature_activations,
+                labels,
+                top_10_features,
+                cluster_0_id=cluster_0_id,
+                cluster_1_id=cluster_1_id
+            )
+        else:
+            classifier_results = train_cluster_classifier_full_l1(
+                feature_activations,
+                labels,
+                cluster_0_id=cluster_0_id,
+                cluster_1_id=cluster_1_id,
+                C=args.full_l1_C,
+            )
     
     print(f"\nClassifier Results:")
     if args.classifier_mode == "top-k":
         print(f"  Mode: top-k (k={classifier_results['n_features_used']})")
         print(f"  Features used: {classifier_results['top_feature_indices']}")
+    elif args.classifier_mode == "pca-l1":
+        print(f"  Mode: pca-l1")
+        print(f"  PCA components: {classifier_results['n_components']}")
+        print(f"  Variance explained: {classifier_results['variance_explained']:.4f}")
+        print(f"  Non-zero coefficients: {classifier_results['n_nonzero_features']}")
     else:
         print(f"  Mode: full-l1")
         print(f"  Total features: {classifier_results['n_features_used']}")
@@ -1036,8 +1225,9 @@ def main():
     print(f"    Precision (Cluster {cluster_1_id}): {classifier_results['classification_report'][f'Cluster {cluster_1_id}']['precision']:.4f}")
     print(f"    Recall (Cluster {cluster_1_id}): {classifier_results['classification_report'][f'Cluster {cluster_1_id}']['recall']:.4f}")
     
-    # Add classifier results to main results (without the classifier object for JSON serialization)
-    classifier_results_for_json = {k: v for k, v in classifier_results.items() if k != "classifier"}
+    # Add classifier results to main results (exclude non-JSON-serializable objects)
+    exclude_keys = {"classifier", "pca", "scaler"}
+    classifier_results_for_json = {k: v for k, v in classifier_results.items() if k not in exclude_keys}
     results["classifier_results"] = classifier_results_for_json
     
     # Save classifier if requested
@@ -1047,19 +1237,24 @@ def main():
             classifier_results["top_feature_indices"],
             cluster_0_id,
             cluster_1_id,
-            args.save_classifier
+            args.save_classifier,
+            pca=classifier_results.get("pca"),
+            scaler=classifier_results.get("scaler"),
         )
-    
+    if args.classifier_mode != "pca-l1":
+        feature_name = "sae"
+    else:
+        feature_name = "pca"
     # Save results
     if args.output:
         output_path = Path(args.output)
         # If output_path is a directory, create a filename inside it
         if output_path.is_dir():
-            output_path = output_path / f"sae_analysis_layer_{args.layer}.json"
+            output_path = output_path / f"{feature_name}_analysis_layer_{args.layer}.json"
         # Ensure parent directory exists
         output_path.parent.mkdir(parents=True, exist_ok=True)
     else:
-        output_path = partition_path.parent / f"sae_analysis_layer_{args.layer}.json"
+        output_path = partition_path.parent / f"{feature_name}_analysis_layer_{args.layer}.json"
     
     # Add metadata
     results["metadata"] = {
@@ -1069,7 +1264,7 @@ def main():
         "partition_results_path": str(partition_path),
         "threshold": args.threshold,
         "sae_path": args.sae_path if args.sae_path else "auto-detected",
-        "non_zero_features": classifier_results["n_nonzero_features"],
+        "non_zero_features": classifier_results.get("n_nonzero_features", classifier_results.get("n_features_used")),
         "classifier_mode": args.classifier_mode,
         "Precision_Cluster_0": classifier_results["classification_report"][f"Cluster {cluster_0_id}"]["precision"],
         "Recall_Cluster_0": classifier_results["classification_report"][f"Cluster {cluster_0_id}"]["recall"],

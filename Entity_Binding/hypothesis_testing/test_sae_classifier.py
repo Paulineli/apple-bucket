@@ -24,7 +24,7 @@ from tqdm import tqdm
 
 # Add causalab and hypothesis_testing to path
 _script_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(_script_dir, '..', 'causalab'))
+sys.path.insert(0, os.path.join(_script_dir, '..', '..', 'causalab'))
 if _script_dir not in sys.path:
     sys.path.insert(0, _script_dir)
 
@@ -149,6 +149,69 @@ def predict_cluster_with_classifier(
     return predictions
 
 
+def predict_cluster_with_classifier_pca(
+    pipeline,
+    samples: List[Dict],
+    classifier,
+    classifier_metadata: Dict,
+    layer: int,
+    batch_size: int,
+    task_type: str,
+    num_groups: int
+) -> np.ndarray:
+    """
+    Use PCA classifier to predict cluster membership for samples.
+    
+    Uses raw model activations (no SAE), applies scaler and PCA transform,
+    then predicts with the classifier.
+    
+    Args:
+        pipeline: LMPipeline object
+        samples: List of input samples
+        classifier: Trained LogisticRegression classifier
+        classifier_metadata: Metadata dict with "pca", "scaler", cluster_0_id, cluster_1_id
+        layer: Layer number
+        batch_size: Batch size for processing
+        task_type: Task type
+        num_groups: Number of groups
+        
+    Returns:
+        Array of predicted cluster IDs
+    """
+    print("Extracting raw activations for PCA classifier prediction...")
+    
+    activations = extract_activations_at_layer(
+        pipeline,
+        samples,
+        layer,
+        batch_size=batch_size,
+        task_type=task_type,
+        num_groups=num_groups
+    )
+    
+    # Convert to numpy (handle BFloat16)
+    X_raw = activations.cpu().float().numpy()
+    
+    # Apply scaler and PCA
+    scaler = classifier_metadata["scaler"]
+    pca = classifier_metadata["pca"]
+    X_scaled = scaler.transform(X_raw)
+    X_pca = pca.transform(X_scaled)
+    
+    print(f"Using PCA-reduced activations for prediction (d={X_pca.shape[1]})")
+    
+    # Predict cluster membership
+    print("Predicting cluster membership...")
+    predictions_binary = classifier.predict(X_pca)
+    
+    cluster_0_id = classifier_metadata["cluster_0_id"]
+    cluster_1_id = classifier_metadata["cluster_1_id"]
+    
+    predictions = np.where(predictions_binary == 0, cluster_0_id, cluster_1_id)
+    
+    return predictions
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Filter entity binding dataset using trained classifier"
@@ -218,7 +281,7 @@ def main():
         "--sae-path",
         type=str,
         default=None,
-        help="Path to SAE (HuggingFace model ID, local path, or 'release:sae_id' format)"
+        help="Path to SAE (HuggingFace model ID, local path, or 'release:sae_id' format). Not required when using a PCA classifier (pca-l1 mode)."
     )
     parser.add_argument(
         "--output-dir",
@@ -273,19 +336,16 @@ def main():
     # Load classifier
     print("Loading classifier...")
     classifier, classifier_metadata = load_classifier(args.classifier_path)
+    is_pca_mode = classifier_metadata.get("mode") == "pca-l1"
+    print(f"  Mode: {'PCA (raw activations)' if is_pca_mode else 'SAE features'}")
     print(f"  Loaded classifier with {classifier_metadata['n_features']} features")
-    print(f"  Cluster 0 ID: {classifier_metadata['cluster_0_id']} (high IIA)")
-    print(f"  Cluster 1 ID: {classifier_metadata['cluster_1_id']} (low IIA)")
+    print(f"  Cluster 0 ID: {classifier_metadata['cluster_0_id']} (high IIA per training)")
+    print(f"  Cluster 1 ID: {classifier_metadata['cluster_1_id']} (low IIA per training)")
     
-    # Determine which cluster to keep
-    cluster_to_keep = classifier_metadata['cluster_0_id']  # High IIA by default
-    cluster_to_filter = classifier_metadata['cluster_1_id']  # Low IIA by default
-    
-    if args.keep_low_iia:
-        cluster_to_keep, cluster_to_filter = cluster_to_filter, cluster_to_keep
-        print(f"  Keeping cluster {cluster_to_keep} (low IIA)")
-    else:
-        print(f"  Keeping cluster {cluster_to_keep} (high IIA)")
+    # cluster_0_id / cluster_1_id from training (cluster_0 = high IIA, cluster_1 = low IIA)
+    # We'll determine which to keep after computing IIA on the test graph (see below)
+    cluster_0_id = classifier_metadata['cluster_0_id']
+    cluster_1_id = classifier_metadata['cluster_1_id']
     
     # Load model
     print(f"\nLoading model {args.model}...")
@@ -298,10 +358,16 @@ def main():
     pipeline.tokenizer.padding_side = "left"
     print("  Model loaded")
     
-    # Load SAE
-    print(f"\nLoading SAE for layer {args.layer}...")
-    sae = load_sae(args.model, args.layer, device=device, sae_path=args.sae_path)
-    print("  SAE loaded")
+    # Load SAE (not needed for PCA mode)
+    sae = None
+    if not is_pca_mode:
+        if args.sae_path is None:
+            raise ValueError("--sae-path is required when using a non-PCA classifier (top-k or full-l1 mode)")
+        print(f"\nLoading SAE for layer {args.layer}...")
+        sae = load_sae(args.model, args.layer, device=device, sae_path=args.sae_path)
+        print("  SAE loaded")
+    else:
+        print("\nSkipping SAE (using PCA classifier on raw activations)")
     
     # Create config and causal model
     config = create_config(args.task, args.num_groups)
@@ -336,34 +402,37 @@ def main():
     
     # Step 3: Predict cluster membership using classifier
     print(f"\nPredicting cluster membership for {len(filtered_samples)} samples...")
-    predictions = predict_cluster_with_classifier(
-        pipeline,
-        filtered_samples,
-        classifier,
-        classifier_metadata,
-        sae,
-        args.layer,
-        args.batch_size,
-        args.task,
-        args.num_groups
-    )
+    if is_pca_mode:
+        predictions = predict_cluster_with_classifier_pca(
+            pipeline,
+            filtered_samples,
+            classifier,
+            classifier_metadata,
+            args.layer,
+            args.batch_size,
+            args.task,
+            args.num_groups
+        )
+    else:
+        predictions = predict_cluster_with_classifier(
+            pipeline,
+            filtered_samples,
+            classifier,
+            classifier_metadata,
+            sae,
+            args.layer,
+            args.batch_size,
+            args.task,
+            args.num_groups
+        )
     
     # Count predictions
     unique, counts = np.unique(predictions, return_counts=True)
     print("\nPrediction distribution:")
     for cluster_id, count in zip(unique, counts):
-        cluster_type = "high IIA" if cluster_id == classifier_metadata['cluster_0_id'] else "low IIA"
-        print(f"  Cluster {cluster_id} ({cluster_type}): {count} samples")
+        print(f"  Cluster {cluster_id}: {count} samples")
     
-    # Step 4: Summary by cluster (for reporting only)
-    keep_mask = predictions == cluster_to_keep
-    filtered_by_classifier = [s for s, keep in zip(filtered_samples, keep_mask) if keep]
-    filtered_out_samples = [s for s, keep in zip(filtered_samples, keep_mask) if not keep]
-    
-    print(f"\nCluster {cluster_to_keep}: {len(filtered_by_classifier)} samples")
-    print(f"Cluster {cluster_to_filter}: {len(filtered_out_samples)} samples")
-    
-    # Step 5: Get graph for the whole filtered dataset (build or load)
+    # Step 4: Get graph for whole filtered dataset (build or load)
     full_adj_matrix = None
     full_iia = None
     full_undirected_density = None
@@ -402,14 +471,42 @@ def main():
     else:
         print(f"\nSkipping graph (only {len(filtered_samples)} samples, need at least 2)")
 
-    # Compute IIA and density for each cluster from subgraphs of the whole graph (no extra model calls)
+    # Determine which cluster to keep based on actual IIA on the test graph (avoids convention confusion)
+    if full_adj_matrix is not None:
+        iia_by_predicted_cluster = {}
+        for cid in unique:
+            idx = np.where(predictions == cid)[0]
+            if len(idx) >= 2:
+                sub = full_adj_matrix[np.ix_(idx, idx)]
+                iia, _ = compute_directed_and_undirected_density_from_directed(sub)
+                iia_by_predicted_cluster[cid] = iia
+            else:
+                iia_by_predicted_cluster[cid] = 0.0
+        high_iia_cluster = max(iia_by_predicted_cluster, key=iia_by_predicted_cluster.get)
+        low_iia_cluster = min(iia_by_predicted_cluster, key=iia_by_predicted_cluster.get)
+        cluster_to_keep = low_iia_cluster if args.keep_low_iia else high_iia_cluster
+        cluster_to_filter = high_iia_cluster if args.keep_low_iia else low_iia_cluster
+        print(f"\n  IIA by predicted cluster: {dict((k, f'{v:.4f}') for k, v in iia_by_predicted_cluster.items())}")
+        print(f"  Keeping cluster {cluster_to_keep} ({'low' if args.keep_low_iia else 'high'} IIA)")
+    else:
+        cluster_to_keep = cluster_0_id if not args.keep_low_iia else cluster_1_id
+        cluster_to_filter = cluster_1_id if not args.keep_low_iia else cluster_0_id
+
+    # Summary by cluster
+    keep_mask = predictions == cluster_to_keep
+    filtered_by_classifier = [s for s, keep in zip(filtered_samples, keep_mask) if keep]
+    filtered_out_samples = [s for s, keep in zip(filtered_samples, keep_mask) if not keep]
+    print(f"\nCluster {cluster_to_keep}: {len(filtered_by_classifier)} samples (kept)")
+    print(f"Cluster {cluster_to_filter}: {len(filtered_out_samples)} samples (filtered out)")
+
+    # Compute IIA and density for kept vs filtered-out subgraphs
     if full_adj_matrix is not None:
         kept_idx = np.where(keep_mask)[0]
         filtered_out_idx = np.where(~keep_mask)[0]
         if len(kept_idx) >= 2:
             sub_kept = full_adj_matrix[np.ix_(kept_idx, kept_idx)]
             cluster_iia, cluster_undirected_density = compute_directed_and_undirected_density_from_directed(sub_kept)
-            print(f"\n  IIA for kept cluster {cluster_to_keep} (from whole graph): {cluster_iia:.4f}")
+            print(f"  IIA for kept cluster {cluster_to_keep} (from whole graph): {cluster_iia:.4f}")
             print(f"  Undirected density for kept cluster {cluster_to_keep}: {cluster_undirected_density:.4f}")
         if len(filtered_out_idx) >= 2:
             sub_filtered_out = full_adj_matrix[np.ix_(filtered_out_idx, filtered_out_idx)]
@@ -431,13 +528,18 @@ def main():
         print(f"  IIA for filtered-out cluster {cluster_to_filter}: {filtered_out_iia:.4f}")
 
     # Save results (include cluster_labels in JSON; one entry per sample in same order as filtered_samples)
+    # Exclude pca/scaler from metadata for JSON serialization
+    classifier_metadata_serializable = {
+        k: v for k, v in classifier_metadata.items()
+        if k not in ("pca", "scaler")
+    }
     results = {
         "task": args.task,
         "num_groups": args.num_groups,
         "model": args.model,
         "layer": args.layer,
         "classifier_path": args.classifier_path,
-        "classifier_metadata": classifier_metadata,
+        "classifier_metadata": classifier_metadata_serializable,
         "initial_sample_size": args.sample_size if args.filtered_dataset_path is None else None,
         "filtered_dataset_path": args.filtered_dataset_path,
         "graph_path": args.graph_path,
@@ -456,18 +558,19 @@ def main():
         "cluster_labels": [int(p) for p in predictions],
     }
     
-    results_path = output_dir / f"classifier_filter_results_{args.task}_{args.layer}_{args.num_groups}_{args.sample_size}_{model_safe}.json"
+    pca_suffix = "_pca" if is_pca_mode else ""
+    results_path = output_dir / f"classifier_filter_results{pca_suffix}_{args.task}_{args.layer}_{args.num_groups}_{args.sample_size}_{model_safe}.json"
     with open(results_path, 'w') as f:
         json.dump(results, f, indent=2)
     
     # Save whole filtered dataset (after model filtering; one file)
-    dataset_path = output_dir / f"filtered_dataset_{args.task}_{args.layer}_{args.num_groups}_{args.sample_size}_{model_safe}.pkl"
+    dataset_path = output_dir / f"filtered_dataset{pca_suffix}_{args.task}_{args.layer}_{args.num_groups}_{args.sample_size}_{model_safe}.pkl"
     with open(dataset_path, 'wb') as f:
         pickle.dump(filtered_samples, f)
     
     # Save whole graph (one file)
     if full_adj_matrix is not None:
-        graph_path = output_dir / f"graph_whole_{args.task}_{args.layer}_{args.num_groups}_{args.sample_size}_{model_safe}.pkl"
+        graph_path = output_dir / f"graph_whole{pca_suffix}_{args.task}_{args.layer}_{args.num_groups}_{args.sample_size}_{model_safe}.pkl"
         with open(graph_path, 'wb') as f:
             pickle.dump(full_adj_matrix, f)
         print(f"Graph (whole) saved to: {graph_path}")

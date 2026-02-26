@@ -14,7 +14,7 @@ The project:
 
 - Python 3.8+
 - PyTorch
-- The `causalab` package (in the parent directory)
+- The `causalab` package (at the project root)
 - A GPU (recommended, but can run on CPU)
 
 ## Usage
@@ -166,8 +166,8 @@ If you run out of memory:
 
 If you get import errors:
 - Make sure you're in the correct directory
-- Check that the `causalab` package is accessible
-- Verify Python path includes the parent directory
+- Check that the `causalab` package is accessible (at project root)
+- Scripts add the project-root causalab to sys.path automatically
 
 ## Code Structure
 
