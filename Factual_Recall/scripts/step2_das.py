@@ -18,10 +18,15 @@ from source → base should cause the model to predict the source's country.
 """
 
 import os
-# Must be set before any HuggingFace library is imported.
-os.environ["HF_HOME"] = "/vision/u/puyinli/Multi_Variable_Causal_Abstraction/.hf_cache"
-os.environ["TRANSFORMERS_OFFLINE"] = "1"
-os.environ["HF_DATASETS_OFFLINE"] = "1"
+# Load HF token from file if present (for gated models)
+_hf_token_path = os.path.join(os.path.dirname(__file__), "..", "hf_token.txt")
+if os.path.exists(_hf_token_path):
+    with open(_hf_token_path) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                os.environ["HF_TOKEN"] = line
+                break
 
 import sys
 import argparse
@@ -29,7 +34,6 @@ import copy
 import json
 import random
 import re
-from functools import partial
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -45,7 +49,7 @@ from tqdm import tqdm
 # causalab path
 # ---------------------------------------------------------------------------
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(_REPO_ROOT / "boundlessDAS"))
+sys.path.insert(0, str(_REPO_ROOT / "causalab"))
 
 from causalab.neural.pipeline import LMPipeline
 from causalab.neural.featurizers import Featurizer, SubspaceFeaturizer
@@ -59,16 +63,15 @@ from causalab.experiments.metric import (
     LM_loss_and_metric_fn,
     causal_score_intervention_outputs,
 )
-from causalab.causal.counterfactual_dataset import CounterfactualDataset
+# causalab uses list[CounterfactualExample] for datasets (CounterfactualDataset was removed)
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
 ARTIFACTS  = Path(__file__).parent.parent / "artifacts"
-_HF_CACHE  = Path(__file__).resolve().parent.parent.parent / ".hf_cache"
-MODEL_NAME = str(_HF_CACHE / "models--meta-llama--Llama-3.1-8B" / "snapshots"
-                 / "d04e592bb4f6aa9cfee91e2e20afa771667e1d4b")
+# Repo id; model is downloaded from HuggingFace Hub.
+MODEL_NAME = "meta-llama/Llama-3.1-8B"
 SEED = 42
 
 # ---------------------------------------------------------------------------
@@ -110,15 +113,15 @@ class RAVELCausalModel:
     """
     Trivial causal model for RAVEL: labels are pre-stored in the dataset.
     label_counterfactual_data is a no-op because the 'label' column already
-    exists in every CounterfactualDataset we build.
+    exists in every dataset we build.
     """
 
     def __init__(self):
         self.id = "ravel"
 
     def label_counterfactual_data(
-        self, dataset: CounterfactualDataset, target_variables
-    ) -> CounterfactualDataset:
+        self, dataset: list, target_variables
+    ) -> list:
         return dataset
 
 
@@ -136,14 +139,13 @@ def load_pipeline(max_new_tokens: int = 6) -> LMPipeline:
     """
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, local_files_only=True)
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
     tokenizer.pad_token    = tokenizer.eos_token
     tokenizer.pad_token_id = tokenizer.eos_token_id
     tokenizer.padding_side = "left"
 
     model = AutoModelForCausalLM.from_pretrained(
         MODEL_NAME,
-        local_files_only=True,
         torch_dtype=torch.bfloat16,
         device_map="auto",
     )
@@ -203,8 +205,8 @@ def make_city_token_position(pipeline: LMPipeline) -> TokenPosition:
 # ---------------------------------------------------------------------------
 
 def build_counterfactual_dataset(
-    pairs: List[Tuple[dict, dict]], id: str = "ravel"
-) -> CounterfactualDataset:
+    pairs: List[Tuple[dict, dict]], id: str = "ravel", target_attribute = "language"
+) -> list:
     """
     Build a CounterfactualDataset from (base, source) pairs where base and
     source differ only in the city name.
@@ -218,22 +220,44 @@ def build_counterfactual_dataset(
     for base_ex, src_ex in pairs:
         inputs.append({
             "raw_input": base_ex["prompt"],
+            "attribute": base_ex["attribute"],
             "city":      base_ex["city"],
             "gold":      base_ex["gold"],
+            "language":  base_ex["languagegold"],
         })
         cf_inputs.append([{
             "raw_input": src_ex["prompt"],
+            "attribute": src_ex["attribute"],
             "city":      src_ex["city"],
             "gold":      src_ex["gold"],
+            "language":  src_ex["languagegold"],
         }])
-        labels.append(" " + src_ex["gold"].strip())
+        if (target_attribute or "").lower() == (base_ex["attribute"] or "").lower():
+            # The base asks about the target attribute, so the intervention should change the output.
+            # Language uses "languagegold" (always present in step1_accuracy_processed.jsonl).
+            # Other attributes use "gold" when the source row has the same attribute.
+            attr_lower = (target_attribute or "").lower()
+            data_key = ATTR_TO_DATA_KEY.get(attr_lower) or ATTR_TO_DATA_KEY.get(target_attribute)
+            if data_key is None and (src_ex.get("attribute") or "").lower() == attr_lower:
+                data_key = "gold"
+            if data_key and data_key in src_ex:
+                val = src_ex[data_key]
+                labels.append(" " + str(val))
+            else:
+                raise ValueError(
+                    f"Cannot get source value for target {target_attribute}: "
+                    f"need key {data_key or 'gold'} (languagegold for Language), src keys: {list(src_ex.keys())}"
+                )
+        else:
+            # The base does not ask about the target attribute. Therefore, the intervention does not change the output.
+            labels.append(" " + base_ex["gold"])
 
     hf_ds = Dataset.from_dict({
         "input":                inputs,
         "counterfactual_inputs": cf_inputs,
         "label":                labels,
     })
-    return CounterfactualDataset(dataset=hf_ds, id=id)
+    return hf_ds.to_list()
 
 
 # ---------------------------------------------------------------------------
@@ -245,19 +269,149 @@ def build_pairs(
     n_pairs: int,
     seed: int = SEED,
     require_diff_gold: bool = True,
+    target_attribute: str | None = None,
 ) -> List[Tuple[dict, dict]]:
     """Sample (base, source) pairs that differ in city; optionally require
-    different gold labels so the intervention is always informative."""
+    different gold labels so the intervention is always informative.
+    If target_attribute is set, only include pairs where BOTH base and source
+    have attribute == target_attribute (for evaluation on target-only samples)."""
     rng = random.Random(seed)
     pool: List[Tuple[dict, dict]] = [
         (base, src)
         for i, base in enumerate(examples)
         for j, src in enumerate(examples)
-        if i != j and (not require_diff_gold or base["gold"] != src["gold"])
+        if i != j and (not require_diff_gold or base["gold"] != src["gold"]) # do we need to add a condition that the city is different?
     ]
+    if target_attribute is not None:
+        target_attr = _normalize_attr(target_attribute)
+        pool = [
+            (base, src)
+            for base, src in pool
+            if base.get("attribute") == target_attr and src.get("attribute") == target_attr
+        ]
     if len(pool) > n_pairs:
         pool = rng.sample(pool, n_pairs)
     return pool
+
+
+# Six attributes in the dataset (must match step1_prep.ATTRIBUTES).
+ALL_ATTRIBUTES = ["Continent", "Country", "Language", "Latitude", "Longitude", "Timezone"]
+
+# Map target_attribute to the key in step1_accuracy_processed.jsonl
+# Language uses "languagegold" (city language, always present); others use "gold" when attribute matches.
+ATTR_TO_DATA_KEY = {"language": "languagegold", "Language": "languagegold"}
+
+
+def _sample_pairs_from_pools(
+    base_pool: List[dict],
+    src_pool: List[dict],
+    n_requested: int,
+    require_diff_gold: bool,
+    rng: random.Random,
+) -> List[Tuple[dict, dict]]:
+    """Sample up to n_requested (base, src) pairs without building full O(n²) pool.
+    Uses rejection sampling; assumes pools are large enough for the requested count."""
+    if not base_pool or not src_pool:
+        return []
+    result: List[Tuple[dict, dict]] = []
+    seen: set = set()  # (base_city, src_city) for dedup
+    max_tries = n_requested * 50
+    tries = 0
+    while len(result) < n_requested and tries < max_tries:
+        base = rng.choice(base_pool)
+        src = rng.choice(src_pool)
+        key = (base["city"], src["city"])
+        if key in seen or base is src:
+            tries += 1
+            continue
+        if require_diff_gold and base["gold"] == src["gold"]:
+            tries += 1
+            continue
+        seen.add(key)
+        result.append((base, src))
+        tries = 0
+    return result
+
+
+def _normalize_attr(attr: str) -> str:
+    """Map user-facing attribute names (e.g. language) to dataset keys (e.g. Language)."""
+    for a in ALL_ATTRIBUTES:
+        if a.lower() == attr.lower():
+            return a
+    return attr
+
+
+def build_pairs_weighted(
+    examples: List[dict],
+    n_pairs: int,
+    target_attribute: str,
+    high_weight_ratio: float = 5.0,
+    seed: int = SEED,
+    require_diff_gold: bool = True,
+) -> List[Tuple[dict, dict]]:
+    """Sample (base, source) pairs with controlled ratios:
+    - high_weight_ratio/(1+high_weight_ratio) pairs with base from target_attribute
+    - 1/(1+high_weight_ratio) pairs with base from other attributes
+    Within each group, source attributes are evenly distributed across all six.
+
+    Expects flat examples from step1_accuracy_filtered.jsonl (city, attribute, prompt, gold).
+    Uses indexed sampling instead of O(n²) pair enumeration for efficiency."""
+    rng = random.Random(seed)
+    target_attr = _normalize_attr(target_attribute)
+
+    by_attr: Dict[str, List[dict]] = {}
+    for ex in examples:
+        attr = ex.get("attribute", "")
+        by_attr.setdefault(attr, []).append(ex)
+
+    frac_high = high_weight_ratio / (1.0 + high_weight_ratio)
+    n_high = int(n_pairs * frac_high)
+    n_low = n_pairs - n_high
+
+    result: List[Tuple[dict, dict]] = []
+    other_attrs = [a for a in ALL_ATTRIBUTES if a != target_attr]
+    target_base_pool = by_attr.get(target_attr, [])
+
+    def divvy(n: int, k: int) -> List[int]:
+        base, rem = divmod(n, k)
+        return [base + (1 if i < rem else 0) for i in range(k)]
+
+    counts_high = divvy(n_high, 6)
+    counts_low = divvy(n_low, 6)
+
+    for i, src_attr in enumerate(ALL_ATTRIBUTES):
+        src_pool = by_attr.get(src_attr, [])
+        n_this = counts_high[i]
+        if n_this > 0:
+            pairs = _sample_pairs_from_pools(
+                target_base_pool, src_pool, n_this, require_diff_gold, rng
+            )
+            result.extend(pairs)
+    result = result[:n_high]
+    high_count = len(result)
+
+    for i, src_attr in enumerate(ALL_ATTRIBUTES):
+        src_pool = by_attr.get(src_attr, [])
+        n_this = counts_low[i]
+        if n_this <= 0:
+            continue
+        n_per_base_attr = max(1, n_this // len(other_attrs))
+        for base_attr in other_attrs:
+            base_pool = by_attr.get(base_attr, [])
+            if not base_pool:
+                continue
+            pairs = _sample_pairs_from_pools(
+                base_pool, src_pool, n_per_base_attr, require_diff_gold, rng
+            )
+            result.extend(pairs)
+            if len(result) - high_count >= n_low:
+                break
+        if len(result) - high_count >= n_low:
+            break
+    result = result[: high_count + n_low]
+
+    rng.shuffle(result)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -266,10 +420,11 @@ def build_pairs(
 
 def evaluate_iia_on_dataset(
     pipeline: LMPipeline,
-    dataset: CounterfactualDataset,
+    dataset: list,
     target,          # InterchangeTarget with (possibly trained) featurizer
     key: Tuple,
     batch_size: int = 8,
+    target_variable: str = "language",
 ) -> float:
     """Evaluate IIA using causalab's run_interchange_interventions + scorer."""
     raw_results = {
@@ -285,7 +440,7 @@ def evaluate_iia_on_dataset(
         raw_results=raw_results,
         dataset=dataset,
         causal_model=RAVELCausalModel(),
-        target_variable_groups=[("country",)],
+        target_variable_groups=[(target_variable,)],
         metric=ravel_checker,
     )
     return float(eval_result["results_by_key"][key]["avg_score"])
@@ -395,15 +550,21 @@ def run_train(args) -> None:
     def _load(path: Path) -> List[dict]:
         return [json.loads(l) for l in path.read_text().splitlines() if l.strip()]
 
-    train_data     = _load(ARTIFACTS / "country_train.jsonl")
-    test_data      = _load(ARTIFACTS / "country_test.jsonl")
-    continent_data = _load(ARTIFACTS / "continent_data.jsonl")
-    print(f"country_train: {len(train_data)}  country_test: {len(test_data)}"
-          f"  continent: {len(continent_data)}")
+    data = _load(ARTIFACTS / "step1_accuracy_processed.jsonl")
+    rng = random.Random(SEED)
+    shuffled = data[:]
+    rng.shuffle(shuffled)
+
+    # split the data into train and test (shuffle first so both splits have all attributes)
+    split_idx = int(len(shuffled) * 0.8)
+    train_data = shuffled[:split_idx]
+    test_data = shuffled[split_idx:]
+    print(f"train: {len(train_data)}  test: {len(test_data)}")
 
     pipeline  = load_pipeline(max_new_tokens=6)
     num_layers = pipeline.model.config.num_hidden_layers
     d_model    = pipeline.model.config.hidden_size
+    target_attribute = args.target_attribute
 
     # Layer grid
     if args.layers:
@@ -414,12 +575,33 @@ def run_train(args) -> None:
     print(f"Sweeping {len(layers)} layers: {layers}")
     print(f"Sweeping k values: {args.k_dims}")
 
-    # Fixed evaluation datasets (built once, reused across all (layer, k))
-    test_pairs      = build_pairs(test_data,      n_pairs=args.n_eval_pairs, seed=SEED)
-    continent_pairs = build_pairs(continent_data, n_pairs=args.n_eval_pairs, seed=SEED + 1)
-    test_cfds       = build_counterfactual_dataset(test_pairs,      id="country_test")
-    continent_cfds  = build_counterfactual_dataset(continent_pairs, id="continent")
-    print(f"Eval pairs — country_test: {len(test_pairs)}  continent: {len(continent_pairs)}")
+    # Fixed datasets (built once, reused across all (layer, k))
+    n_test_pairs = min(args.n_eval_pairs, 300)  # cap at 300 pairs; test_data is target-only
+    test_pairs   = build_pairs(test_data, n_pairs=n_test_pairs, seed=SEED, target_attribute=target_attribute)
+    train_pairs     = build_pairs_weighted(
+        train_data, n_pairs=args.n_train_pairs,
+        target_attribute=target_attribute,
+        high_weight_ratio=5.0, seed=SEED,
+    )
+    if not test_pairs:
+        raise ValueError(
+            f"No test pairs with both base and source attribute == {target_attribute}. "
+            "Data may lack sufficient examples; try shuffling before split (now done) or a different target_attribute."
+        )
+    test_cfds       = build_counterfactual_dataset(test_pairs,  id="country_test",  target_attribute=target_attribute)
+    train_cfds      = build_counterfactual_dataset(train_pairs, id="country_train", target_attribute=target_attribute)
+    print(f"Eval pairs — test: {len(test_pairs)}")
+    target_attr_norm = _normalize_attr(target_attribute)
+    if train_pairs:
+        base, src = train_pairs[0]
+        print("Example train pair — base:", json.dumps(base, indent=2), "source:", json.dumps(src, indent=2))
+    if test_pairs:
+        base, src = test_pairs[0]
+        print("Example test pair — base:", json.dumps(base, indent=2), "source:", json.dumps(src, indent=2))
+    target_attr_norm = _normalize_attr(target_attribute)
+    n_high = sum(1 for b, _ in train_pairs if b["attribute"] == target_attr_norm)
+    pct = 100 * n_high / len(train_pairs) if train_pairs else 0
+    print(f"Train pairs: {len(train_pairs)} (target-relevant: {n_high}, ~{pct:.0f}%)")
 
     city_pos = make_city_token_position(pipeline)
 
@@ -443,14 +625,7 @@ def run_train(args) -> None:
         for k in args.k_dims:
             print(f"\n── Layer {layer}  k={k} ──")
 
-            # 1. Build training CounterfactualDataset
-            train_pairs = build_pairs(
-                train_data, n_pairs=args.n_train_pairs,
-                seed=SEED + layer * 100 + k,
-            )
-            train_cfds = build_counterfactual_dataset(train_pairs, id="country_train")
-
-            # 2. Build InterchangeTarget for this layer at the city entity token
+            # 1. Build InterchangeTarget for this (layer, k) at the city entity token
             residual_targets = build_residual_stream_targets(
                 pipeline=pipeline,
                 layers=[layer],
@@ -475,25 +650,22 @@ def run_train(args) -> None:
                 counterfactual_dataset=train_cfds,
                 intervention_type="interchange",
                 config={**train_config, "DAS": {"n_features": k}},
-                loss_and_metric_fn=partial(LM_loss_and_metric_fn, checker=ravel_checker),
+                loss_and_metric_fn=lambda p, m, b, t, sp, sim: LM_loss_and_metric_fn(
+                    p, m, b, t, ravel_checker, source_pipeline=sp, source_intervenable_model=sim
+                ),
             )
 
-            # 5. Evaluate IIA on country_test and continent
-            iia_country = evaluate_iia_on_dataset(
+            # 5. Evaluate IIA on test set only
+            iia_test = evaluate_iia_on_dataset(
                 pipeline, test_cfds, target, key, batch_size=args.batch_size,
+                target_variable=target_attribute,
             )
-            iia_cont = evaluate_iia_on_dataset(
-                pipeline, continent_cfds, target, key, batch_size=args.batch_size,
-            )
-            print(f"  IIA country_test={iia_country:.3f}  IIA_continent={iia_cont:.3f}")
-            results[layer][k] = {
-                "iia_country_test": iia_country,
-                "iia_continent":    iia_cont,
-            }
+            print(f"  IIA test={iia_test:.3f}")
+            results[layer][k] = {"iia_country_test": iia_test}
 
             # 6. Checkpoint if best so far
-            if iia_country > best_iia:
-                best_iia, best_layer, best_k = iia_country, layer, k
+            if iia_test > best_iia:
+                best_iia, best_layer, best_k = iia_test, layer, k
                 ckpt_dir = ARTIFACTS / "das_best_featurizer"
                 ckpt_dir.mkdir(exist_ok=True)
                 feat_base = str(ckpt_dir / "featurizer")
@@ -507,23 +679,19 @@ def run_train(args) -> None:
 
     # Summary
     print(f"\n{'=' * 50}")
-    print(f"Best: layer={best_layer}  k={best_k}  IIA_country={best_iia:.3f}")
-    best_cont = results[best_layer][best_k]["iia_continent"]
-    print(f"IIA continent at best model = {best_cont:.3f}")
+    print(f"Best: layer={best_layer}  k={best_k}  IIA test={best_iia:.3f}")
 
     results["best"] = {
         "layer": best_layer, "k": best_k,
         "iia_country_test": best_iia,
-        "iia_continent":    best_cont,
     }
 
-    print(f"\n{'Layer':>6} {'k':>6} {'IIA_country_test':>18} {'IIA_continent':>15}")
+    print(f"\n{'Layer':>6} {'k':>6} {'IIA_test':>12}")
     for layer in sorted(l for l in results if l != "best"):
         for k in sorted(results[layer]):
             rc = results[layer][k]["iia_country_test"]
-            ri = results[layer][k]["iia_continent"]
             marker = " ★" if (layer == best_layer and k == best_k) else ""
-            print(f"{layer:>6} {k:>6} {rc:>18.3f} {ri:>15.3f}{marker}")
+            print(f"{layer:>6} {k:>6} {rc:>12.3f}{marker}")
 
     out_path = ARTIFACTS / "das_results.json"
     with open(out_path, "w") as f:
@@ -534,20 +702,13 @@ def run_train(args) -> None:
         )
     print(f"\nFull results → {out_path}")
 
-    # Heatmaps
-    country_grid   = {l: {k: results[l][k]["iia_country_test"] for k in results[l]}
-                      for l in layers}
-    continent_grid = {l: {k: results[l][k]["iia_continent"]    for k in results[l]}
-                      for l in layers}
+    # Heatmap (test set only)
+    test_grid = {l: {k: results[l][k]["iia_country_test"] for k in results[l]}
+                 for l in layers}
     plot_iia_heatmap(
-        country_grid, layers, args.k_dims,
-        title="DAS IIA on country_test (entity token position)",
-        save_path=ARTIFACTS / "das_heatmap_country.png",
-    )
-    plot_iia_heatmap(
-        continent_grid, layers, args.k_dims,
-        title="DAS IIA on continent (country-trained, entity token position)",
-        save_path=ARTIFACTS / "das_heatmap_continent.png",
+        test_grid, layers, args.k_dims,
+        title="DAS IIA on test set (entity token position)",
+        save_path=ARTIFACTS / "das_heatmap_test.png",
     )
 
 
@@ -585,12 +746,18 @@ def run_test(args) -> None:
 
     data = [json.loads(l)
             for l in Path(args.test_data).read_text().splitlines() if l.strip()]
-    pairs    = build_pairs(data, n_pairs=args.n_eval_pairs, seed=SEED)
-    test_cfs = build_counterfactual_dataset(pairs, id="test")
+    target_attribute = getattr(args, "target_attribute", "language")
+    # Test: only pairs where BOTH base and source attribute == target_attribute
+    pairs    = build_pairs(
+        data, n_pairs=args.n_eval_pairs, seed=SEED,
+        target_attribute=target_attribute,
+    )
+    test_cfs = build_counterfactual_dataset(pairs, id="test", target_attribute=target_attribute)
     print(f"Evaluating {len(pairs)} pairs from {Path(args.test_data).name}")
 
     iia = evaluate_iia_on_dataset(
         pipeline, test_cfs, target, key, batch_size=args.batch_size,
+        target_variable=target_attribute,
     )
     print(f"IIA = {iia:.3f}")
 
@@ -610,25 +777,17 @@ def run_test(args) -> None:
     layers = sorted(int(lk) for lk in layer_keys)
     k_dims = sorted(int(kk) for kk in saved[str(layers[0])].keys())
 
-    country_grid:   Dict[int, Dict[int, float]] = {}
-    continent_grid: Dict[int, Dict[int, float]] = {}
+    test_grid: Dict[int, Dict[int, float]] = {}
     for layer in layers:
-        country_grid[layer]   = {}
-        continent_grid[layer] = {}
+        test_grid[layer] = {}
         for k_val in k_dims:
             entry = saved[str(layer)].get(str(k_val), {})
-            country_grid[layer][k_val]   = entry.get("iia_country_test", float("nan"))
-            continent_grid[layer][k_val] = entry.get("iia_continent",    float("nan"))
+            test_grid[layer][k_val] = entry.get("iia_country_test", float("nan"))
 
     plot_iia_heatmap(
-        country_grid, layers, k_dims,
-        title="DAS IIA on country_test (entity token position)",
-        save_path=ARTIFACTS / "das_heatmap_country.png",
-    )
-    plot_iia_heatmap(
-        continent_grid, layers, k_dims,
-        title="DAS IIA on continent (country-trained, entity token position)",
-        save_path=ARTIFACTS / "das_heatmap_continent.png",
+        test_grid, layers, k_dims,
+        title="DAS IIA on test set (entity token position)",
+        save_path=ARTIFACTS / "das_heatmap_test.png",
     )
 
 
@@ -646,17 +805,20 @@ def parse_args():
     p.add_argument("--layers",        type=str,   default=None,
                    help="Comma-separated layer indices (default: ~8 evenly spaced)")
     p.add_argument("--k_dims",        type=int,   nargs="+", default=[32, 128, 512, 2048])
-    p.add_argument("--n_train_pairs", type=int,   default=5000) # 1024 or 2048 
-    p.add_argument("--n_eval_pairs",  type=int,   default=200)
-    p.add_argument("--n_epochs",      type=int,   default=10)
+    p.add_argument("--n_train_pairs", type=int,   default=3000) # 1024 or 2048 
+    p.add_argument("--n_eval_pairs",  type=int,   default=300)
+    p.add_argument("--n_epochs",      type=int,   default=5)
     p.add_argument("--lr",            type=float, default=5e-3)
-    p.add_argument("--test_data",     type=str,
-                   default=str(ARTIFACTS / "continent_data.jsonl"))
+    p.add_argument("--target_attribute", type=str, default="language",
+                   help="Target attribute for DAS (default: language)")
+    p.add_argument("--gpu", type=int, default=0,
+                   help="GPU index to use (default: 0)")
     return p.parse_args()
 
 
 def main():
     args = parse_args()
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
     random.seed(SEED)
     torch.manual_seed(SEED)
     if args.mode == "filter":

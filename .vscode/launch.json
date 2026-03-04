@@ -98,6 +98,48 @@
                 "PYTHONPATH": "bin/python3.8",
                 "TOKENIZERS_PARALLELISM": "false"
             },
+        },
+        {
+            "name": "Debug das_partition_graph.py",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/GPT2-finetuned/das_partition_graph.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/GPT2-finetuned",
+            "args": [
+                "--layer", "5",
+                "--pos-num", "78",
+                "--weights-path", "training_results/das_weights_das_or_model_1_dim1.pt",
+                "--candidates-path", "training_results/candidates_das_or_model_1_dim1.json",
+                "--K", "2",
+                "--gamma", "0.98",
+                "--graph-dataset-path", "partition_results_das/graph_dataset_200_op4.pkl",
+                "--graph-path", "partition_results_das/graph_das_L5_P78_200_op4.pkl",
+                "--intervention", "op4",
+                "--gpu", "0"
+            ],
+            "justMyCode": false
+        },
+        {
+            "name": "Debug das.py",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/GPT2-finetuned/das.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/GPT2-finetuned",
+            "args": [
+                "--train",
+                "--layer", "5",
+                "--pos-num", "78",
+                "--op-list", "op4",
+                "--gpu", "0"
+            ],
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "bin/python3.8",
+                "TOKENIZERS_PARALLELISM": "false"
+            },
         }
+        
     ]
 }

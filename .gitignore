@@ -5,3 +5,7 @@ Pretrain_models/test_results
 Pretrain_models/result_op2
 Pretrain_models/result_op1
 GPT2-finetuned/fine_tuned_gpt2_or
+Factual_Recall/artifacts/das_best_featurizer
+
+# HuggingFace token (contains secrets)
+Factual_Recall/hf_token.txt
