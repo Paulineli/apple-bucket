@@ -1,0 +1,133 @@
+{
+  "0": {
+    "32": {
+      "iia_country_test": 0.03
+    },
+    "128": {
+      "iia_country_test": 0.03
+    },
+    "512": {
+      "iia_country_test": 0.03
+    },
+    "2048": {
+      "iia_country_test": 0.04
+    }
+  },
+  "4": {
+    "32": {
+      "iia_country_test": 0.02
+    },
+    "128": {
+      "iia_country_test": 0.02
+    },
+    "512": {
+      "iia_country_test": 0.016666666666666666
+    },
+    "2048": {
+      "iia_country_test": 0.06666666666666667
+    }
+  },
+  "8": {
+    "32": {
+      "iia_country_test": 0.016666666666666666
+    },
+    "128": {
+      "iia_country_test": 0.06333333333333334
+    },
+    "512": {
+      "iia_country_test": 0.11333333333333333
+    },
+    "2048": {
+      "iia_country_test": 0.11
+    }
+  },
+  "12": {
+    "32": {
+      "iia_country_test": 0.016666666666666666
+    },
+    "128": {
+      "iia_country_test": 0.02666666666666667
+    },
+    "512": {
+      "iia_country_test": 0.06333333333333334
+    },
+    "2048": {
+      "iia_country_test": 0.14666666666666667
+    }
+  },
+  "16": {
+    "32": {
+      "iia_country_test": 0.02
+    },
+    "128": {
+      "iia_country_test": 0.05
+    },
+    "512": {
+      "iia_country_test": 0.06666666666666667
+    },
+    "2048": {
+      "iia_country_test": 0.09666666666666666
+    }
+  },
+  "20": {
+    "32": {
+      "iia_country_test": 0.02666666666666667
+    },
+    "128": {
+      "iia_country_test": 0.03
+    },
+    "512": {
+      "iia_country_test": 0.03333333333333333
+    },
+    "2048": {
+      "iia_country_test": 0.06
+    }
+  },
+  "24": {
+    "32": {
+      "iia_country_test": 0.02
+    },
+    "128": {
+      "iia_country_test": 0.023333333333333334
+    },
+    "512": {
+      "iia_country_test": 0.02
+    },
+    "2048": {
+      "iia_country_test": 0.023333333333333334
+    }
+  },
+  "28": {
+    "32": {
+      "iia_country_test": 0.023333333333333334
+    },
+    "128": {
+      "iia_country_test": 0.02666666666666667
+    },
+    "512": {
+      "iia_country_test": 0.02
+    },
+    "2048": {
+      "iia_country_test": 0.03
+    }
+  },
+  "31": {
+    "32": {
+      "iia_country_test": 0.02
+    },
+    "128": {
+      "iia_country_test": 0.02
+    },
+    "512": {
+      "iia_country_test": 0.02
+    },
+    "2048": {
+      "iia_country_test": 0.02
+    }
+  },
+  "best": {
+    "layer": 12,
+    "k": 2048,
+    "iia_country_test": 0.14666666666666667
+  }
+}

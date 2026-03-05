@@ -32,6 +32,7 @@ import sys
 import argparse
 import copy
 import json
+import pickle
 import random
 import re
 from pathlib import Path
@@ -46,10 +47,15 @@ from datasets import Dataset
 from tqdm import tqdm
 
 # ---------------------------------------------------------------------------
-# causalab path
+# causalab path and partition_graph (for build_adjacency_from_scores)
 # ---------------------------------------------------------------------------
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_REPO_ROOT / "causalab"))
+_HYPOTHESIS_TESTING = _REPO_ROOT / "Entity_Binding" / "hypothesis_testing"
+if str(_HYPOTHESIS_TESTING) not in sys.path:
+    sys.path.insert(0, str(_HYPOTHESIS_TESTING))
+
+from partition_graph import build_adjacency_from_scores
 
 from causalab.neural.pipeline import LMPipeline
 from causalab.neural.featurizers import Featurizer, SubspaceFeaturizer
@@ -427,15 +433,23 @@ def evaluate_iia_on_dataset(
     target_variable: str = "language",
 ) -> float:
     """Evaluate IIA using causalab's run_interchange_interventions + scorer."""
-    raw_results = {
-        key: run_interchange_interventions(
+    batches = [dataset[i : i + batch_size] for i in range(0, len(dataset), batch_size)]
+    all_strings = []
+    for batch in tqdm(batches, desc="IIA eval", unit="batch", dynamic_ncols=False):
+        batch_raw = run_interchange_interventions(
             pipeline=pipeline,
-            counterfactual_dataset=dataset,
+            counterfactual_dataset=batch,
             interchange_target=target,
-            batch_size=batch_size,
+            batch_size=len(batch),
             output_scores=False,
         )
-    }
+        strings = batch_raw.get("string", [])
+        for item in strings:
+            if isinstance(item, list):
+                all_strings.extend(item)
+            else:
+                all_strings.append(item)
+    raw_results = {key: {"string": all_strings}}
     eval_result = causal_score_intervention_outputs(
         raw_results=raw_results,
         dataset=dataset,
@@ -444,6 +458,86 @@ def evaluate_iia_on_dataset(
         metric=ravel_checker,
     )
     return float(eval_result["results_by_key"][key]["avg_score"])
+
+
+def compute_per_example_scores_ravel(
+    raw_results: Dict,
+    cf_dataset: list,
+    key: Tuple,
+) -> List[float]:
+    """Compute per-example consistency scores from raw intervention results (RAVEL/DAS).
+    cf_dataset entries have 'label' (expected string). Undirected edge (i,j) only if
+    both (i->j) and (j->i) are consistent."""
+    string_outputs = raw_results[key].get("string", [])
+    flattened = []
+    for item in string_outputs:
+        if isinstance(item, list):
+            flattened.extend(item)
+        else:
+            flattened.append(item)
+    scores = []
+    for idx, output_string in enumerate(flattened):
+        if idx < len(cf_dataset):
+            expected = cf_dataset[idx].get("label", "")
+            expected_str = expected.get("string", str(expected)) if isinstance(expected, dict) else str(expected)
+            is_consistent = ravel_checker({"string": output_string}, expected_str)
+            scores.append(1.0 if is_consistent else 0.0)
+        else:
+            scores.append(0.0)
+    return scores
+
+
+def build_graph_das(
+    pipeline: LMPipeline,
+    target,
+    key: Tuple,
+    samples: List[dict],
+    target_attribute: str,
+    batch_size: int,
+) -> np.ndarray:
+    """Build undirected adjacency matrix from interchange intervention consistency.
+    Edge (i,j) exists iff both (i->j) and (j->i) interventions yield correct output.
+    Follows partition_graph.py pattern; does not partition."""
+    n = len(samples)
+    if n <= 1:
+        return np.zeros((n, n), dtype=bool)
+
+    # Pairs (i,j) and (j,i) for all i < j, matching partition_graph create_pair_counterfactuals order
+    pairs_ordered: List[Tuple[dict, dict]] = []
+    pair_indices: List[Tuple[int, int, str]] = []
+    for i in range(n):
+        for j in range(i + 1, n):
+            pairs_ordered.append((samples[i], samples[j]))
+            pair_indices.append((i, j, "ij"))
+            pairs_ordered.append((samples[j], samples[i]))
+            pair_indices.append((i, j, "ji"))
+
+    cf_dataset = build_counterfactual_dataset(
+        pairs_ordered, id="graph_build", target_attribute=target_attribute
+    )
+    num_batches = (len(cf_dataset) + batch_size - 1) // batch_size
+    print(f"Building graph: {n} nodes, {len(pairs_ordered)} interventions in {num_batches} batches...")
+
+    all_strings = []
+    batches = [cf_dataset[i : i + batch_size] for i in range(0, len(cf_dataset), batch_size)]
+    for batch in tqdm(batches, desc="Graph interventions", unit="batch", dynamic_ncols=False):
+        batch_raw = run_interchange_interventions(
+            pipeline=pipeline,
+            counterfactual_dataset=batch,
+            interchange_target=target,
+            batch_size=len(batch),
+            output_scores=False,
+        )
+        strings = batch_raw.get("string", [])
+        for item in strings:
+            if isinstance(item, list):
+                all_strings.extend(item)
+            else:
+                all_strings.append(item)
+    raw_results = {key: {"string": all_strings}}
+    scores = compute_per_example_scores_ravel(raw_results, cf_dataset, key)
+    adj_matrix = build_adjacency_from_scores(scores, pair_indices, n)
+    return adj_matrix
 
 
 # ---------------------------------------------------------------------------
@@ -519,7 +613,7 @@ def run_filter(args) -> None:
     for label, examples in [("Country", country), ("Continent", continent)]:
         correct = 0
         prompt_dicts = [{"raw_input": e["prompt"]} for e in examples]
-        for i in tqdm(range(0, len(prompt_dicts), args.batch_size), desc=label):
+        for i in tqdm(range(0, len(prompt_dicts), args.batch_size), desc=label, dynamic_ncols=False):
             batch_dicts = prompt_dicts[i:i + args.batch_size]
             out = pipeline.generate(batch_dicts)
             preds = out["string"] if isinstance(out["string"], list) else [out["string"]]
@@ -620,62 +714,62 @@ def run_train(args) -> None:
     best_iia, best_layer, best_k = -1.0, -1, -1
     best_ckpt_dir: Path | None = None
 
-    for layer in layers:
-        results[layer] = {}
-        for k in args.k_dims:
-            print(f"\n── Layer {layer}  k={k} ──")
+    layer_k_pairs = [(layer, k) for layer in layers for k in args.k_dims]
+    for layer, k in tqdm(layer_k_pairs, desc="Train (layer × k)", dynamic_ncols=False):
+        results.setdefault(layer, {})
+        print(f"\n── Layer {layer}  k={k} ──")
 
-            # 1. Build InterchangeTarget for this (layer, k) at the city entity token
-            residual_targets = build_residual_stream_targets(
-                pipeline=pipeline,
-                layers=[layer],
-                token_positions=[city_pos],
-                mode="one_target_per_layer",
+        # 1. Build InterchangeTarget for this (layer, k) at the city entity token
+        residual_targets = build_residual_stream_targets(
+            pipeline=pipeline,
+            layers=[layer],
+            token_positions=[city_pos],
+            mode="one_target_per_layer",
+        )
+        key    = (layer,)
+        target = residual_targets[key]
+
+        # 3. Attach a fresh SubspaceFeaturizer (DAS rotation matrix)
+        for unit in target.flatten():
+            unit.set_featurizer(SubspaceFeaturizer(
+                shape=(d_model, k),
+                trainable=True,
+                id=f"DAS_L{layer}_k{k}",
+            ))
+
+        # 4. Train via pyvene (modifies featurizer in-place)
+        train_interventions_pyvene(
+            pipeline=pipeline,
+            interchange_target=target,
+            counterfactual_dataset=train_cfds,
+            intervention_type="interchange",
+            config={**train_config, "DAS": {"n_features": k}},
+            loss_and_metric_fn=lambda p, m, b, t, sp, sim: LM_loss_and_metric_fn(
+                p, m, b, t, ravel_checker, source_pipeline=sp, source_intervenable_model=sim
+            ),
+        )
+
+        # 5. Evaluate IIA on test set only
+        iia_test = evaluate_iia_on_dataset(
+            pipeline, test_cfds, target, key, batch_size=args.batch_size,
+            target_variable=target_attribute,
+        )
+        print(f"  IIA test={iia_test:.3f}")
+        results[layer][k] = {"iia_country_test": iia_test}
+
+        # 6. Checkpoint if best so far
+        if iia_test > best_iia:
+            best_iia, best_layer, best_k = iia_test, layer, k
+            ckpt_dir = ARTIFACTS / "das_best_featurizer"
+            ckpt_dir.mkdir(exist_ok=True)
+            feat_base = str(ckpt_dir / "featurizer")
+            target.flatten()[0].featurizer.save_modules(feat_base)
+            best_ckpt_dir = ckpt_dir
+            torch.save(
+                {"layer": layer, "k": k, "d_model": d_model,
+                 "featurizer_path": feat_base},
+                str(ARTIFACTS / "das_best.pt"),
             )
-            key    = (layer,)
-            target = residual_targets[key]
-
-            # 3. Attach a fresh SubspaceFeaturizer (DAS rotation matrix)
-            for unit in target.flatten():
-                unit.set_featurizer(SubspaceFeaturizer(
-                    shape=(d_model, k),
-                    trainable=True,
-                    id=f"DAS_L{layer}_k{k}",
-                ))
-
-            # 4. Train via pyvene (modifies featurizer in-place)
-            train_interventions_pyvene(
-                pipeline=pipeline,
-                interchange_target=target,
-                counterfactual_dataset=train_cfds,
-                intervention_type="interchange",
-                config={**train_config, "DAS": {"n_features": k}},
-                loss_and_metric_fn=lambda p, m, b, t, sp, sim: LM_loss_and_metric_fn(
-                    p, m, b, t, ravel_checker, source_pipeline=sp, source_intervenable_model=sim
-                ),
-            )
-
-            # 5. Evaluate IIA on test set only
-            iia_test = evaluate_iia_on_dataset(
-                pipeline, test_cfds, target, key, batch_size=args.batch_size,
-                target_variable=target_attribute,
-            )
-            print(f"  IIA test={iia_test:.3f}")
-            results[layer][k] = {"iia_country_test": iia_test}
-
-            # 6. Checkpoint if best so far
-            if iia_test > best_iia:
-                best_iia, best_layer, best_k = iia_test, layer, k
-                ckpt_dir = ARTIFACTS / "das_best_featurizer"
-                ckpt_dir.mkdir(exist_ok=True)
-                feat_base = str(ckpt_dir / "featurizer")
-                target.flatten()[0].featurizer.save_modules(feat_base)
-                best_ckpt_dir = ckpt_dir
-                torch.save(
-                    {"layer": layer, "k": k, "d_model": d_model,
-                     "featurizer_path": feat_base},
-                    str(ARTIFACTS / "das_best.pt"),
-                )
 
     # Summary
     print(f"\n{'=' * 50}")
@@ -744,16 +838,59 @@ def run_test(args) -> None:
     for unit in target.flatten():
         unit.set_featurizer(featurizer)
 
+    test_data_path = Path(args.test_data or str(ARTIFACTS / "step1_accuracy_processed.jsonl"))
+    if not test_data_path.exists():
+        raise FileNotFoundError(f"Test data not found: {test_data_path}")
     data = [json.loads(l)
-            for l in Path(args.test_data).read_text().splitlines() if l.strip()]
+            for l in test_data_path.read_text().splitlines() if l.strip()]
     target_attribute = getattr(args, "target_attribute", "language")
+    target_attr_norm = _normalize_attr(target_attribute)
+
+    # Build test dataset: only samples with attribute == target_attribute (follow partition_graph pattern)
+    test_dataset = [r for r in data if (r.get("attribute") or "").strip() == target_attr_norm]
+    if not test_dataset:
+        raise ValueError(
+            f"No samples with attribute == {target_attribute!r} in {test_data_path}. "
+            "Cannot build test dataset or graph."
+        )
+    print(f"Test dataset (target_attribute={target_attribute!r}): {len(test_dataset)} samples")
+
+    # Build graph from interchange intervention consistency (do NOT partition)
+    test_results_dir = ARTIFACTS / "test_results"
+    test_results_dir.mkdir(parents=True, exist_ok=True)
+    graph_size = min(len(test_dataset), getattr(args, "test_graph_size", 50))
+    samples_for_graph = test_dataset[:graph_size]
+    print(f"Building graph on {len(samples_for_graph)} samples (test_graph_size={graph_size})...")
+    adj_matrix = build_graph_das(
+        pipeline=pipeline,
+        target=target,
+        key=key,
+        samples=samples_for_graph,
+        target_attribute=target_attribute,
+        batch_size=args.batch_size,
+    )
+    with open(test_results_dir / "test_dataset.pkl", "wb") as f:
+        pickle.dump(test_dataset, f)
+    with open(test_results_dir / "graph.pkl", "wb") as f:
+        pickle.dump(adj_matrix, f)
+    # Save metadata so we know graph corresponds to first graph_size samples of test_dataset
+    with open(test_results_dir / "test_results_meta.json", "w") as f:
+        json.dump({
+            "target_attribute": target_attribute,
+            "n_test_dataset": len(test_dataset),
+            "n_graph_nodes": len(samples_for_graph),
+            "test_data_path": str(test_data_path),
+        }, f, indent=2)
+    print(f"Saved test dataset and graph → {test_results_dir} (test_dataset.pkl, graph.pkl); partition not run.")
+
+    """
     # Test: only pairs where BOTH base and source attribute == target_attribute
     pairs    = build_pairs(
         data, n_pairs=args.n_eval_pairs, seed=SEED,
         target_attribute=target_attribute,
     )
     test_cfs = build_counterfactual_dataset(pairs, id="test", target_attribute=target_attribute)
-    print(f"Evaluating {len(pairs)} pairs from {Path(args.test_data).name}")
+    print(f"Evaluating {len(pairs)} pairs from {test_data_path.name}")
 
     iia = evaluate_iia_on_dataset(
         pipeline, test_cfs, target, key, batch_size=args.batch_size,
@@ -789,7 +926,7 @@ def run_test(args) -> None:
         title="DAS IIA on test set (entity token position)",
         save_path=ARTIFACTS / "das_heatmap_test.png",
     )
-
+    """
 
 # ---------------------------------------------------------------------------
 # CLI
@@ -811,6 +948,10 @@ def parse_args():
     p.add_argument("--lr",            type=float, default=5e-3)
     p.add_argument("--target_attribute", type=str, default="language",
                    help="Target attribute for DAS (default: language)")
+    p.add_argument("--test_graph_size", type=int, default=200,
+                   help="Max number of samples to use when building test graph (default: 50)")
+    p.add_argument("--test_data", type=str, default=None,
+                   help="Path to test data JSONL (for test mode; default: step1_accuracy_processed)")
     p.add_argument("--gpu", type=int, default=0,
                    help="GPU index to use (default: 0)")
     return p.parse_args()
