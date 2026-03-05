@@ -44,6 +44,9 @@ if _hf_token_path.exists():
             break
 
 MODEL_NAME = "meta-llama/Llama-3.1-8B"
+_HF_CACHE = Path(__file__).resolve().parent.parent.parent / ".hf_cache"
+_LOCAL_MODEL = _HF_CACHE / "models--meta-llama--Llama-3.1-8B" / "snapshots" / "d04e592bb4f6aa9cfee91e2e20afa771667e1d4b"
+MODEL_PATH = str(_LOCAL_MODEL) if _LOCAL_MODEL.exists() else MODEL_NAME
 
 
 # ---------------------------------------------------------------------------
@@ -53,13 +56,14 @@ MODEL_NAME = "meta-llama/Llama-3.1-8B"
 def load_model():
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    print(f"  Loading from: {MODEL_PATH}")
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.pad_token_id = tokenizer.eos_token_id
     tokenizer.padding_side = "left"
 
     model = AutoModelForCausalLM.from_pretrained(
-        MODEL_NAME, torch_dtype=torch.bfloat16, device_map="auto"
+        MODEL_PATH, torch_dtype=torch.bfloat16, device_map="auto"
     )
     model.config._attn_implementation = "eager"
     model.config.use_cache = False
@@ -203,7 +207,7 @@ def find_common_features(X: np.ndarray, labels: np.ndarray, top_k: int = 20) -> 
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--K", type=int, default=6,
+    p.add_argument("--K", type=int, default=2,
                    help="Number of subgraphs for quasi-clique partitioning")
     p.add_argument("--gamma", type=float, default=0.9,
                    help="Minimum edge density for quasi-cliques (default: 0.9)")
@@ -360,6 +364,7 @@ def main():
     # ------------------------------------------------------------------
     results = {
         "model": MODEL_NAME,
+        "model_path": MODEL_PATH,
         "layer": args.layer,
         "sae_path": args.sae_path,
         "K": args.K,
