@@ -7,7 +7,7 @@ Step 4: SAE-based classifier for factual recall graph-partition groups.
 3. Extract residual stream at layer 14, city last-token position (for the N graph nodes)
 4. Encode through SAE → sparse feature activations
 5. Train multi-class logistic regression predicting cluster label
-6. Report SAE-based prediction accuracy; find top SAE features per cluster
+6. Report SAE-based prediction accuracy; find most differential SAE features between clusters
 """
 
 import sys, os, json, pickle, argparse
@@ -181,22 +181,31 @@ def compute_subgraph_iia(adj_matrix: np.ndarray, labels: np.ndarray, cluster_id:
 
 
 # ---------------------------------------------------------------------------
-# Common SAE features per cluster
+# Differential SAE features between clusters
 # ---------------------------------------------------------------------------
 
-def find_common_features(X: np.ndarray, labels: np.ndarray, top_k: int = 20) -> Dict:
-    """For each cluster find top-firing SAE features by mean activation."""
+def find_differential_features(X: np.ndarray, labels: np.ndarray, top_k: int = 20) -> Dict:
+    """For each cluster find SAE features that fire most differently vs other clusters.
+    Returns features with the largest (mean_in_this_cluster - mean_in_others) per cluster."""
     results = {}
     for lbl in sorted(set(labels.tolist())):
-        mask = labels == lbl
-        mean_act = X[mask].mean(axis=0)
-        firing_rate = (X[mask] > 0).mean(axis=0)
-        top_idx = np.argsort(mean_act)[::-1][:top_k]
+        mask_this = labels == lbl
+        mask_other = ~mask_this
+        mean_this = X[mask_this].mean(axis=0)
+        mean_other = X[mask_other].mean(axis=0)
+        # Differential: positive = fires more in this cluster than others
+        diff = mean_this - mean_other
+        top_idx = np.argsort(diff)[::-1][:top_k]
+        firing_this = (X[mask_this] > 0).mean(axis=0)
+        firing_other = (X[mask_other] > 0).mean(axis=0)
         results[int(lbl)] = {
-            "n_samples": int(mask.sum()),
-            "top_features_by_mean": top_idx.tolist(),
-            "top_mean_activations": mean_act[top_idx].tolist(),
-            "top_firing_rates": firing_rate[top_idx].tolist(),
+            "n_samples": int(mask_this.sum()),
+            "top_differential_features": top_idx.tolist(),
+            "differential_mean": diff[top_idx].tolist(),
+            "mean_in_cluster": mean_this[top_idx].tolist(),
+            "mean_in_other_clusters": mean_other[top_idx].tolist(),
+            "firing_rate_in_cluster": firing_this[top_idx].tolist(),
+            "firing_rate_in_other": firing_other[top_idx].tolist(),
         }
     return results
 
@@ -205,8 +214,16 @@ def find_common_features(X: np.ndarray, labels: np.ndarray, top_k: int = 20) -> 
 # Main
 # ---------------------------------------------------------------------------
 
+def directed_to_undirected(adj_directed: np.ndarray) -> np.ndarray:
+    """Recover undirected graph from directed: edge (i,j) exists iff both i->j and j->i."""
+    adj = np.asarray(adj_directed, dtype=bool)
+    return adj & adj.T
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--test-results-dir", type=str, default=None,
+                   help="Test results dir (e.g. test_results_mdas); default: test_results")
     p.add_argument("--K", type=int, default=2,
                    help="Number of subgraphs for quasi-clique partitioning")
     p.add_argument("--gamma", type=float, default=0.9,
@@ -221,7 +238,7 @@ def main():
                    help="Batch size for SAE encoding")
     p.add_argument("--test-size", type=float, default=0.2)
     p.add_argument("--top-k-features", type=int, default=20,
-                   help="Top SAE features to report per cluster")
+                   help="Top differential SAE features to report per cluster")
     p.add_argument("--cache-activations", type=str, default=None,
                    help="Path to cache/load pre-extracted activations (.pt)")
     p.add_argument("--output-dir", type=str, default=None)
@@ -236,13 +253,18 @@ def main():
     # ------------------------------------------------------------------
     # Load graph and test dataset
     # ------------------------------------------------------------------
-    with open(ARTIFACTS / "test_results" / "test_dataset.pkl", "rb") as f:
+    test_results_dir = Path(args.test_results_dir) if args.test_results_dir else ARTIFACTS / "test_results"
+    with open(test_results_dir / "test_dataset.pkl", "rb") as f:
         all_samples = pickle.load(f)
-    with open(ARTIFACTS / "test_results" / "graph.pkl", "rb") as f:
-        adj_matrix = pickle.load(f)
+    with open(test_results_dir / "graph.pkl", "rb") as f:
+        adj_directed = pickle.load(f)
 
-    adj_matrix = np.asarray(adj_matrix, dtype=bool)
-    n_nodes = adj_matrix.shape[0]
+    adj_directed = np.asarray(adj_directed, dtype=bool)
+    n_nodes = adj_directed.shape[0]
+
+    # Recover undirected graph for quasi-clique: edge (i,j) iff both i->j and j->i
+    adj_matrix = directed_to_undirected(adj_directed)
+    print(f"Graph: directed ({int(np.sum(adj_directed))} edges) -> undirected ({int(np.sum(adj_matrix))//2} edges)")
 
     # graph.pkl covers the first n_nodes samples of test_dataset
     samples = all_samples[:n_nodes]
@@ -345,19 +367,45 @@ def main():
     ))
 
     # ------------------------------------------------------------------
-    # Common SAE features per cluster
+    # L1 logistic regression selected features (non-zero coefficients)
     # ------------------------------------------------------------------
-    print(f"Finding top-{args.top_k_features} SAE features per cluster...")
-    common_features = find_common_features(X, y, top_k=args.top_k_features)
-
-    print("\nTop SAE features per cluster (by mean activation):")
+    coef = clf.coef_  # (n_classes, n_features) for multi-class
+    n_total = coef.shape[1]
+    l1_selected = {}
     for k in range(args.K):
-        info = common_features[k]
-        feats = info["top_features_by_mean"][:5]
-        acts = [f"{v:.3f}" for v in info["top_mean_activations"][:5]]
-        rates = [f"{v:.2f}" for v in info["top_firing_rates"][:5]]
+        nonzero = np.where(coef[k] != 0)[0]
+        # Sort by absolute coefficient (most influential first)
+        order = np.argsort(np.abs(coef[k][nonzero]))[::-1]
+        sorted_idx = nonzero[order]
+        l1_selected[k] = {
+            "feature_indices": sorted_idx.tolist(),
+            "coefficients": coef[k][sorted_idx].tolist(),
+        }
+    all_selected = np.unique(np.concatenate([np.where(coef[k] != 0)[0] for k in range(args.K)]))
+    print(f"\nL1 logistic regression selected features:")
+    print(f"  Total SAE features: {n_total}, Non-zero in at least one class: {len(all_selected)}")
+    for k in range(args.K):
+        info = l1_selected[k]
+        feats = info["feature_indices"][:10]
+        coefs = [f"{c:.3f}" for c in info["coefficients"][:10]]
+        print(f"  Cluster {k}: {len(info['feature_indices'])} selected  "
+              f"top 10 features {feats}  coefs {coefs}")
+
+    # ------------------------------------------------------------------
+    # Differential SAE features between clusters
+    # ------------------------------------------------------------------
+    print(f"Finding top-{args.top_k_features} most differential SAE features per cluster...")
+    differential_features = find_differential_features(X, y, top_k=args.top_k_features)
+
+    print("\nMost differential SAE features per cluster (highest in this cluster vs others):")
+    for k in range(args.K):
+        info = differential_features[k]
+        feats = info["top_differential_features"][:5]
+        diffs = [f"{v:.3f}" for v in info["differential_mean"][:5]]
+        in_cl = [f"{v:.3f}" for v in info["mean_in_cluster"][:5]]
+        out_cl = [f"{v:.3f}" for v in info["mean_in_other_clusters"][:5]]
         print(f"  Cluster {k} (n={info['n_samples']:3d}, IIA={cluster_iia[k]:.3f}): "
-              f"features {feats}  mean_acts {acts}  firing_rates {rates}")
+              f"features {feats}  diff(mean) {diffs}  in_cluster {in_cl}  in_other {out_cl}")
 
     # ------------------------------------------------------------------
     # Save results
@@ -377,7 +425,9 @@ def main():
         "train_accuracy": float(train_acc),
         "test_accuracy": float(test_acc),
         "classification_report": report,
-        "common_features_per_cluster": common_features,
+        "l1_selected_features_per_cluster": l1_selected,
+        "l1_selected_count": int(len(all_selected)),
+        "differential_features_per_cluster": differential_features,
     }
 
     out_path = output_dir / f"sae_classifier_results_K{args.K}_layer{args.layer}.json"

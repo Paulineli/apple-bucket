@@ -47,15 +47,13 @@ from datasets import Dataset
 from tqdm import tqdm
 
 # ---------------------------------------------------------------------------
-# causalab path and partition_graph (for build_adjacency_from_scores)
+# causalab path
 # ---------------------------------------------------------------------------
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_REPO_ROOT / "causalab"))
 _HYPOTHESIS_TESTING = _REPO_ROOT / "Entity_Binding" / "hypothesis_testing"
 if str(_HYPOTHESIS_TESTING) not in sys.path:
     sys.path.insert(0, str(_HYPOTHESIS_TESTING))
-
-from partition_graph import build_adjacency_from_scores
 
 from causalab.neural.pipeline import LMPipeline
 from causalab.neural.featurizers import Featurizer, SubspaceFeaturizer
@@ -487,6 +485,27 @@ def compute_per_example_scores_ravel(
     return scores
 
 
+def build_directed_adjacency_from_scores(
+    scores: List[float],
+    pair_indices: List[Tuple[int, int, str]],
+    n: int,
+) -> np.ndarray:
+    """Build DIRECTED adjacency matrix. Edge i->j exists iff when i is source and j is base,
+    the interchange intervention prediction is correct.
+    Pair (base i, source j) → j->i; pair (base j, source i) → i->j."""
+    adj_matrix = np.zeros((n, n), dtype=bool)
+    for idx, (i, j, direction) in enumerate(pair_indices):
+        if idx >= len(scores) or scores[idx] <= 0.5:
+            continue
+        # "ij" = (base i, source j): j is source, i is base → j->i → adj[j,i]=True
+        # "ji" = (base j, source i): i is source, j is base → i->j → adj[i,j]=True
+        if direction == "ij":
+            adj_matrix[j, i] = True
+        elif direction == "ji":
+            adj_matrix[i, j] = True
+    return adj_matrix
+
+
 def build_graph_das(
     pipeline: LMPipeline,
     target,
@@ -495,28 +514,28 @@ def build_graph_das(
     target_attribute: str,
     batch_size: int,
 ) -> np.ndarray:
-    """Build undirected adjacency matrix from interchange intervention consistency.
-    Edge (i,j) exists iff both (i->j) and (j->i) interventions yield correct output.
-    Follows partition_graph.py pattern; does not partition."""
+    """Build DIRECTED adjacency matrix from interchange intervention consistency.
+    Edge i->j exists iff when i is source and j is base, the prediction is correct.
+    Undirected graph can be recovered as (adj & adj.T) - edge exists iff both directions correct."""
     n = len(samples)
     if n <= 1:
         return np.zeros((n, n), dtype=bool)
 
-    # Pairs (i,j) and (j,i) for all i < j, matching partition_graph create_pair_counterfactuals order
+    # Pairs (i,j) and (j,i) for all i < j: (base, source) order
     pairs_ordered: List[Tuple[dict, dict]] = []
     pair_indices: List[Tuple[int, int, str]] = []
     for i in range(n):
         for j in range(i + 1, n):
-            pairs_ordered.append((samples[i], samples[j]))
+            pairs_ordered.append((samples[i], samples[j]))   # base i, source j
             pair_indices.append((i, j, "ij"))
-            pairs_ordered.append((samples[j], samples[i]))
+            pairs_ordered.append((samples[j], samples[i]))   # base j, source i
             pair_indices.append((i, j, "ji"))
 
     cf_dataset = build_counterfactual_dataset(
         pairs_ordered, id="graph_build", target_attribute=target_attribute
     )
     num_batches = (len(cf_dataset) + batch_size - 1) // batch_size
-    print(f"Building graph: {n} nodes, {len(pairs_ordered)} interventions in {num_batches} batches...")
+    print(f"Building directed graph: {n} nodes, {len(pairs_ordered)} interventions in {num_batches} batches...")
 
     all_strings = []
     batches = [cf_dataset[i : i + batch_size] for i in range(0, len(cf_dataset), batch_size)]
@@ -536,7 +555,7 @@ def build_graph_das(
                 all_strings.append(item)
     raw_results = {key: {"string": all_strings}}
     scores = compute_per_example_scores_ravel(raw_results, cf_dataset, key)
-    adj_matrix = build_adjacency_from_scores(scores, pair_indices, n)
+    adj_matrix = build_directed_adjacency_from_scores(scores, pair_indices, n)
     return adj_matrix
 
 
@@ -672,15 +691,30 @@ def run_train(args) -> None:
     # Fixed datasets (built once, reused across all (layer, k))
     n_test_pairs = min(args.n_eval_pairs, 300)  # cap at 300 pairs; test_data is target-only
     test_pairs   = build_pairs(test_data, n_pairs=n_test_pairs, seed=SEED, target_attribute=target_attribute)
-    train_pairs     = build_pairs_weighted(
-        train_data, n_pairs=args.n_train_pairs,
-        target_attribute=target_attribute,
-        high_weight_ratio=5.0, seed=SEED,
-    )
+    # training_method: "mdas" = multi-attribute DAS (all attributions), "das" = target-only DAS
+    if args.training_method == "das":
+        train_pairs = build_pairs(
+            train_data, n_pairs=args.n_train_pairs, seed=SEED,
+            require_diff_gold=True, target_attribute=target_attribute,
+        )
+        print("Train pairs: DAS (target_attribute only)")
+    else:
+        train_pairs = build_pairs_weighted(
+            train_data, n_pairs=args.n_train_pairs,
+            target_attribute=target_attribute,
+            high_weight_ratio=5.0, seed=SEED,
+        )
+        print("Train pairs: MDAS (all attributions, weighted)")
     if not test_pairs:
         raise ValueError(
             f"No test pairs with both base and source attribute == {target_attribute}. "
             "Data may lack sufficient examples; try shuffling before split (now done) or a different target_attribute."
+        )
+    if not train_pairs:
+        raise ValueError(
+            f"No train pairs for --training_method={args.training_method}. "
+            f"DAS mode requires pairs with both base and source attribute == {target_attribute}. "
+            "Ensure enough train examples or use --training_method mdas."
         )
     test_cfds       = build_counterfactual_dataset(test_pairs,  id="country_test",  target_attribute=target_attribute)
     train_cfds      = build_counterfactual_dataset(train_pairs, id="country_train", target_attribute=target_attribute)
@@ -760,7 +794,8 @@ def run_train(args) -> None:
         # 6. Checkpoint if best so far
         if iia_test > best_iia:
             best_iia, best_layer, best_k = iia_test, layer, k
-            ckpt_dir = ARTIFACTS / "das_best_featurizer"
+            method = args.training_method
+            ckpt_dir = ARTIFACTS / f"das_{method}_best_featurizer"
             ckpt_dir.mkdir(exist_ok=True)
             feat_base = str(ckpt_dir / "featurizer")
             target.flatten()[0].featurizer.save_modules(feat_base)
@@ -768,7 +803,7 @@ def run_train(args) -> None:
             torch.save(
                 {"layer": layer, "k": k, "d_model": d_model,
                  "featurizer_path": feat_base},
-                str(ARTIFACTS / "das_best.pt"),
+                str(ARTIFACTS / f"das_{method}_best.pt"),
             )
 
     # Summary
@@ -787,7 +822,7 @@ def run_train(args) -> None:
             marker = " ★" if (layer == best_layer and k == best_k) else ""
             print(f"{layer:>6} {k:>6} {rc:>12.3f}{marker}")
 
-    out_path = ARTIFACTS / "das_results.json"
+    out_path = ARTIFACTS / f"das_{args.training_method}_results.json"
     with open(out_path, "w") as f:
         json.dump(
             {str(l): {str(k): v for k, v in kv.items()}
@@ -801,8 +836,8 @@ def run_train(args) -> None:
                  for l in layers}
     plot_iia_heatmap(
         test_grid, layers, args.k_dims,
-        title="DAS IIA on test set (entity token position)",
-        save_path=ARTIFACTS / "das_heatmap_test.png",
+        title=f"DAS ({args.training_method}) IIA on test set (entity token position)",
+        save_path=ARTIFACTS / f"das_{args.training_method}_heatmap_test.png",
     )
 
 
@@ -811,16 +846,19 @@ def run_train(args) -> None:
 # ---------------------------------------------------------------------------
 
 def run_test(args) -> None:
-    ckpt_path = ARTIFACTS / "das_best.pt"
+    method = getattr(args, "training_method", "mdas")
+    ckpt_path = ARTIFACTS / f"das_{method}_best.pt"
     if not ckpt_path.exists():
-        raise FileNotFoundError(f"{ckpt_path} not found — run --mode train first.")
+        raise FileNotFoundError(
+            f"{ckpt_path} not found — run --mode train --training_method {method} first."
+        )
 
     ckpt      = torch.load(ckpt_path, map_location="cpu")
     layer_idx = ckpt["layer"]
     k         = ckpt["k"]
     d_model   = ckpt["d_model"]
     feat_base = ckpt.get("featurizer_path",
-                          str(ARTIFACTS / "das_best_featurizer" / "featurizer"))
+                          str(ARTIFACTS / f"das_{method}_best_featurizer" / "featurizer"))
     print(f"Loaded checkpoint: layer={layer_idx}, k={k}, d_model={d_model}")
 
     pipeline = load_pipeline(max_new_tokens=6)
@@ -856,7 +894,8 @@ def run_test(args) -> None:
     print(f"Test dataset (target_attribute={target_attribute!r}): {len(test_dataset)} samples")
 
     # Build graph from interchange intervention consistency (do NOT partition)
-    test_results_dir = ARTIFACTS / "test_results"
+    method = getattr(args, "training_method", "mdas")
+    test_results_dir = ARTIFACTS / f"test_results_{method}"
     test_results_dir.mkdir(parents=True, exist_ok=True)
     graph_size = min(len(test_dataset), getattr(args, "test_graph_size", 50))
     samples_for_graph = test_dataset[:graph_size]
@@ -876,7 +915,10 @@ def run_test(args) -> None:
     # Save metadata so we know graph corresponds to first graph_size samples of test_dataset
     with open(test_results_dir / "test_results_meta.json", "w") as f:
         json.dump({
+            "training_method": method,
             "target_attribute": target_attribute,
+            "graph_type": "directed",
+            "graph_semantics": "edge i->j exists iff when i is source and j is base the prediction is correct; undirected = adj & adj.T",
             "n_test_dataset": len(test_dataset),
             "n_graph_nodes": len(samples_for_graph),
             "test_data_path": str(test_data_path),
@@ -948,6 +990,8 @@ def parse_args():
     p.add_argument("--lr",            type=float, default=5e-3)
     p.add_argument("--target_attribute", type=str, default="language",
                    help="Target attribute for DAS (default: language)")
+    p.add_argument("--training_method", choices=["mdas", "das"], default="mdas",
+                   help="mdas: train on all attributions; das: train only on target_attribute pairs; used for output filenames (default: mdas)")
     p.add_argument("--test_graph_size", type=int, default=200,
                    help="Max number of samples to use when building test graph (default: 50)")
     p.add_argument("--test_data", type=str, default=None,
