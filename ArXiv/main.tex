@@ -1,0 +1,71 @@
+\documentclass[10pt]{article}
+
+\usepackage{arxiv}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{microtype}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{subcaption}
+\usepackage{graphicx}
+\usepackage{multirow}
+\usepackage[capitalize]{cleveref}
+\usepackage{bm}
+\usepackage{xcolor}
+\usepackage{natbib}
+
+\newtheorem{definition}{Definition}
+\newtheorem{proposition}{Proposition}
+
+\definecolor{darkblue}{rgb}{0, 0, 0.5}
+\hypersetup{colorlinks=true, citecolor=darkblue, linkcolor=darkblue, urlcolor=darkblue}
+
+\newcommand{\fix}{\marginpar{FIX}}
+\newcommand{\new}{\marginpar{NEW}}
+\newcommand{\jiyuan}[1]{{{\color{cyan} Jiyuan: {#1}}}}
+
+\title{Bucketing the Good Apples: \\A Method for Diagnosing and Improving Causal Abstraction}
+
+%% TODO: Fill in real author names, affiliations, and emails
+\author{
+  \textbf{Li Puyin}\thanks{Equal first authorship.}  $^{\ \diamondsuit}$,
+  \textbf{Jiyuan Tan}\footnotemark[1]  $^{\ \diamondsuit}$,
+  \textbf{Ahmad Jabbar}$^{\diamondsuit}$,
+  \textbf{Thomas Icard}\thanks{Equal senior authorship.}  $^{\ \diamondsuit}$,
+  \textbf{Atticus Geiger}\footnotemark[2]  $^{\ \spadesuit}$  \\[6pt]
+  $^{\diamondsuit}$Stanford University \quad $^{\spadesuit}$Goodfire \\
+  \texttt{\{puyinli, jiyuantan, jabbar, icard\}@stanford.edu}\\
+  \texttt{atticus@goodfire.ai}\\[4pt]
+  % \footnote*{ $^{*}$Equal first authorship \quad $^{\dagger}$Equal senior authorship}
+}
+
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+We present a method for diagnosing interpretation in neural networks by identifying an input subspace where a proposed interpretation is highly faithful. Our method is particularly useful for causal-abstraction-style interpretability, where a high-level causal hypothesis is evaluated by interchange interventions. Rather than treating interchange intervention accuracy as a single global summary, we refine this framework by partitioning the input space into well-interpreted and under-interpreted regions according to pairwise interchange-intervention behavior. This turns causal abstraction from a purely global evaluation into a more diagnostic tool: it not only measures whether an interpretation works, but also reveals where it works, where it fails, and what distinguishes the two cases. This diagnostic view also provides practical heuristics for improving interpretations. By analyzing the structure of the well-interpreted and under-interpreted regions, we can identify missing distinctions in a high-level hypothesis, discover previously unmodeled intermediate variables, and combine complementary partial interpretations into a stronger one. We instantiate this idea as a simple four-step recipe and show that it yields informative error analyses across multiple causal abstraction settings. In a toy logic task, recursively applying the recipe recovers a high-level hypothesis from scratch. More broadly, our results suggest that partitioning the input space is a useful step toward more precise, constructive, and scalable mechanistic interpretability.
+\end{abstract}
+
+\input{sections/new-intro}
+\input{sections/2_prelim}
+\input{sections/3_method}
+\input{sections/4_exp}
+\input{sections/5_conc}
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\appendix
+\input{sections/appendix}
+
+\end{document}

@@ -1,11 +1,22 @@
-# Ignore output and hypothesis_testing folders (too large)
-Entity_Binding/hypothesis_testing/hypothesis_testing
-Entity_Binding/hypothesis_testing/outputs
-Pretrain_models/test_results
-Pretrain_models/result_op2
-Pretrain_models/result_op1
-GPT2-finetuned/fine_tuned_gpt2_or
-Factual_Recall/artifacts/das_best_featurizer
-Factual_Recall/artifacts/das_das_best_featurizer
-# HuggingFace token (contains secrets)
-Factual_Recall/hf_token.txt
+# Python caches
+**/__pycache__/
+*.py[cod]
+*$py.class
+.DS_Store
+
+# HuggingFace token (secrets) — never commit
+experiments/factual_recall/hf_token.txt
+
+# Regenerated entity-binding run dumps (large)
+experiments/entity_binding/outputs/
+
+# Optional local HF cache at repo root
+.hf_cache/
+
+# Fine-tuned GPT-2 weights (large; download or train locally)
+experiments/logic_task/artifacts/models/fine_tuned_gpt2_or/
+
+# Factual-recall DAS featurizer dumps (> GitHub 100MB file limit)
+experiments/factual_recall/artifacts/das_best_featurizer/
+experiments/factual_recall/artifacts/das_das_best_featurizer/
+experiments/factual_recall/artifacts/das_mdas_best_featurizer/

@@ -1,16 +1,13 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug run_das.py (Full Dataset)",
+            "name": "Debug step1_run_das.py (Full Dataset)",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/Entity_Binding/hypothesis_testing/run_das.py",
+            "program": "${workspaceFolder}/experiments/entity_binding/scripts/step1_run_das.py",
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/Entity_Binding",
+            "cwd": "${workspaceFolder}/experiments/entity_binding",
             "args": [
                 "--model", "Qwen/Qwen3-8B",
                 "--size", "1024",
@@ -18,128 +15,132 @@
                 "--num-groups", "10",
                 "--gpu", "0",
                 "--min-accuracy", "0.75",
-                "--output", "hypothesis_testing/outputs/debug_small"
+                "--output", "artifacts/outputs/debug_small"
             ],
-            "justMyCode": false,
-            "env": {
-                "PYTHONPATH": "bin/python3.8",
-            },
+            "justMyCode": false
         },
         {
-            "name": "Debug test_alignment.py (Full Dataset)",
+            "name": "Debug archived test_alignment.py (Full Dataset)",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/Entity_Binding/hypothesis_testing/test_alignment.py",
+            "program": "${workspaceFolder}/archived/entity_binding/scripts/test_alignment.py",
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/Entity_Binding",
+            "cwd": "${workspaceFolder}/experiments/entity_binding",
             "args": [
                 "--test-size", "512",
                 "--batch-size", "16",
                 "--gpu", "1",
-                "--result-path", "hypothesis_testing/outputs/google_gemma-2-2b-it/vanilla_interchange_result.pkl",
-                "--layer", "15", // 23 for qwen3-8b, 15 fo Gemma2-2b-it, 23 for qwen3-4b-it
+                "--result-path", "artifacts/outputs/google_gemma-2-2b-it/vanilla_interchange_result.pkl",
+                "--layer", "15",
                 "--use-swap",
                 "--task-type", "filling_liquids",
-                "--output", "hypothesis_testing/outputs/debug_small",
-                // "--skip-filtering",
+                "--output", "artifacts/outputs/debug_small"
             ],
-            "justMyCode": false,
-            "env": {
-                "PYTHONPATH": "bin/python3.8",
-            },
+            "justMyCode": false
         },
         {
-            "name": "Debug analyze_sae_features.py (Full Dataset)",
+            "name": "Debug step3_train_classifier.py (Gemma 2-2B)",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/Entity_Binding/hypothesis_testing/analyze_sae_features.py",
+            "program": "${workspaceFolder}/experiments/entity_binding/scripts/step3_train_classifier.py",
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/Entity_Binding",
+            "cwd": "${workspaceFolder}/experiments/entity_binding",
             "args": [
-                "--dataset-path", "hypothesis_testing/partition_results/filtered_input_samples_filling_liquids_15_10_512_google_gemma-2-2b-it.pkl",
-                "--partition-results-path", "hypothesis_testing/partition_results/partition_results_filling_liquids_15_10_512_google_gemma-2-2b-it.json",
+                "--dataset-path", "artifacts/partition_results/filtered_input_samples_filling_liquids_15_10_512_google_gemma-2-2b-it.pkl",
+                "--partition-results-path", "artifacts/partition_results/partition_results_filling_liquids_15_10_512_google_gemma-2-2b-it.json",
                 "--layer", "15",
                 "--model", "google/gemma-2-2b-it",
                 "--gpu", "0",
-                "--save-classifier", "hypothesis_testing/partition_results/PCA_results/pca_analysis_layer_15.pkl",
-                "--classifier-mode", "pca-l1",
-                "--pca-n-components", "10",
-                "--full-l1-C", "0.01",
-                "--output", "hypothesis_testing/partition_results/PCA_results/pca_analysis_layer_15.json"
+                "--output", "artifacts/partition_results/SAE_Gemma2_results/sae_analysis_layer_15_10.json"
             ],
             "justMyCode": false,
-            "subProcess": false,
             "env": {
-                "PYTHONPATH": "bin/python3.8",
                 "TOKENIZERS_PARALLELISM": "false"
-            },
+            }
         },
         {
-            "name": "Debug test_sae_classifier.py (PCA)",
+            "name": "Debug step4_test_classifier.py",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/Entity_Binding/hypothesis_testing/test_sae_classifier.py",
+            "program": "${workspaceFolder}/experiments/entity_binding/scripts/step4_test_classifier.py",
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}",
+            "cwd": "${workspaceFolder}/experiments/entity_binding",
             "args": [
-                "--classifier-path", "Entity_Binding/hypothesis_testing/partition_results/PCA_results/pca_analysis_layer_15.pkl",
+                "--classifier-path", "artifacts/partition_results/SAE_Gemma2_results/sae_classifier_15_10.pkl",
                 "--task", "filling_liquids",
                 "--layer", "15",
                 "--model", "google/gemma-2-2b-it",
                 "--gpu", "0",
                 "--num-groups", "10",
-                "--filtered-dataset-path", "Entity_Binding/hypothesis_testing/classifier_filter_results/filtered_dataset_filling_liquids_15_10_200_google_gemma-2-2b-it.pkl",
-                "--graph-path", "Entity_Binding/hypothesis_testing/classifier_filter_results/graph_whole_filling_liquids_15_10_200_google_gemma-2-2b-it.pkl",
-                "--output-dir", "Entity_Binding/hypothesis_testing/partition_results/PCA_results",
+                "--filtered-dataset-path", "artifacts/classifier_filter_results/filtered_dataset_filling_liquids_15_10_200_google_gemma-2-2b-it.pkl",
+                "--graph-path", "artifacts/classifier_filter_results/graph_whole_filling_liquids_15_10_200_google_gemma-2-2b-it.pkl",
+                "--output-dir", "artifacts/partition_results/SAE_Gemma2_results"
             ],
             "justMyCode": false,
-            "subProcess": false,
             "env": {
-                "PYTHONPATH": "bin/python3.8",
                 "TOKENIZERS_PARALLELISM": "false"
-            },
+            }
         },
         {
-            "name": "Debug das_partition_graph.py",
+            "name": "Debug step2_partition.py (logic task)",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/GPT2-finetuned/das_partition_graph.py",
+            "program": "${workspaceFolder}/experiments/logic_task/scripts/step2_partition.py",
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/GPT2-finetuned",
+            "cwd": "${workspaceFolder}/experiments/logic_task",
             "args": [
-                "--layer", "5",
-                "--pos-num", "78",
-                "--weights-path", "training_results/das_weights_das_or_model_1_dim1.pt",
-                "--candidates-path", "training_results/candidates_das_or_model_1_dim1.json",
+                "--layer", "7",
+                "--pos-num", "77",
+                "--weights-path", "artifacts/training_results/das_weights_das_or_model_1_dim1.pt",
+                "--candidates-path", "artifacts/training_results/candidates_das_or_model_1_dim1.json",
                 "--K", "2",
                 "--gamma", "0.98",
-                "--graph-dataset-path", "partition_results_das/graph_dataset_200_op4.pkl",
-                "--graph-path", "partition_results_das/graph_das_L5_P78_200_op4.pkl",
-                "--intervention", "op4",
+                "--graph-dataset-path", "artifacts/partition_results_das/graph_dataset_200_op5_ds.pkl",
+                "--graph-path", "artifacts/partition_results_das/graph_das_200_op5_ds.pkl",
+                "--intervention", "op5",
                 "--gpu", "0"
             ],
             "justMyCode": false
         },
         {
-            "name": "Debug das.py",
+            "name": "Debug step1_das.py logic task (train)",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/GPT2-finetuned/das.py",
+            "program": "${workspaceFolder}/experiments/logic_task/scripts/step1_das.py",
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/GPT2-finetuned",
+            "cwd": "${workspaceFolder}/experiments/logic_task",
             "args": [
                 "--train",
-                "--layer", "5",
-                "--pos-num", "78",
-                "--op-list", "op4",
-                "--gpu", "0"
+                "--gpu", "0",
+                "--op-list", "op1", "op2", "op3", "op4", "op5"
             ],
             "justMyCode": false,
             "env": {
-                "PYTHONPATH": "bin/python3.8",
                 "TOKENIZERS_PARALLELISM": "false"
-            },
+            }
+        },
+        {
+            "name": "Debug step1_das.py logic task (test)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/experiments/logic_task/scripts/step1_das.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/experiments/logic_task",
+            "args": [
+                "--test",
+                "--gpu", "3",
+                "--op-list", "op1", "op2", "op3", "op4", "op5",
+                "--weights-path", "artifacts/training_results/das_weights_das_or_model_1_dim1.pt",
+                "--candidates-path", "artifacts/training_results/candidates_das_or_model_1_dim1.json",
+                "--data-size", "1024",
+                "--batch-size", "32",
+                "--subspace-dimension", "1",
+                "--intervention-type", "das"
+            ],
+            "justMyCode": false,
+            "env": {
+                "TOKENIZERS_PARALLELISM": "false"
+            }
         }
-        
     ]
 }

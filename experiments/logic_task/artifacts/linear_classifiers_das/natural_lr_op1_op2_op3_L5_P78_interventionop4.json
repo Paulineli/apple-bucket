@@ -1,0 +1,44 @@
+{
+  "feature_type": "natural_op_features",
+  "features": [
+    "op1",
+    "op2",
+    "op3"
+  ],
+  "partition_path": "experiments/logic_task/artifacts/partition_results_das/partition_results_das_L5_P78_K2_200_op4.json",
+  "graph_dataset_path": "experiments/logic_task/artifacts/partition_results_das/graph_dataset_200_op4.pkl",
+  "layer": 5,
+  "pos_num": 78,
+  "cluster_0_id_high_iia": 0,
+  "cluster_1_id_low_iia": 1,
+  "label_definition": "y=1 iff sample is in lower IIA cluster",
+  "train_accuracy": 0.949685534591195,
+  "test_accuracy": 0.925,
+  "classifier_params": {
+    "penalty": "l2",
+    "solver": "liblinear",
+    "C": 1.0,
+    "max_iter": 2000,
+    "random_state": 42
+  },
+  "top_coefficients": [
+    {
+      "feature": "op1",
+      "feature_index": 0,
+      "coefficient": 4.047961983896691,
+      "abs_coefficient": 4.047961983896691
+    },
+    {
+      "feature": "op2",
+      "feature_index": 1,
+      "coefficient": 0.9432881274731184,
+      "abs_coefficient": 0.9432881274731184
+    },
+    {
+      "feature": "op3",
+      "feature_index": 2,
+      "coefficient": -0.1089457299746476,
+      "abs_coefficient": 0.1089457299746476
+    }
+  ]
+}

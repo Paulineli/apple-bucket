@@ -1,0 +1,26 @@
+{
+  "Continent": {
+    "n_pairs": 300,
+    "iia": 0.05
+  },
+  "Country": {
+    "n_pairs": 300,
+    "iia": 0.11333333333333333
+  },
+  "Language": {
+    "n_pairs": 300,
+    "iia": 0.14333333333333334
+  },
+  "Latitude": {
+    "n_pairs": 300,
+    "iia": 0.023333333333333334
+  },
+  "Longitude": {
+    "n_pairs": 300,
+    "iia": 0.02
+  },
+  "Timezone": {
+    "n_pairs": 300,
+    "iia": 0.04666666666666667
+  }
+}

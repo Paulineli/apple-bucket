@@ -1,0 +1,4 @@
+# Everything under archived/ is local-only for authors; keep this index tracked.
+*
+!README.md
+!.gitignore

@@ -1,0 +1,51 @@
+\section{Preliminaries}
+
+% \textcolor{red}{the formalism here has to be fixed; make the font of II the same throughout the text.}
+
+Causally abstracting an LM involves hypothesizing and verifying that a higher-level causal model is an abstraction of the lower-level LM. Causal models---familiar from the literature on causal inference (e.g., \citealt{pearl2009causality})---comprise variables, on which interventions predict counterfactual behavior. After hypothesizing alignments of the causal variables within LM representations and verifying the predicted counterfactual behavior for all such representations of an LM with appropriate interventions, the higher-level model can be taken to causally abstract the LM, if the corresponding interventions on the corresponding causal variables predict the same counterfactual output. We adopt notation from \cite{geiger2023causal}.
+
+% More often than not, perfect alignment due to interchange interventions. Instead of concluding  Building on \citet{smolensky1986neural}'s insight that individual concepts can be distributed over multiple neurons, \citet{geiger-etal-2023-DAS} propose a method for finding such distributed representations with rotations due to change-of-basis matrices. The rotations that yield alignment can be found with gradient descent. (Have to iterate on this. Add Arora's CausalGym reference for how DAS outperforms other interp methods.)
+
+
+\textbf{Causal Abstraction.} Specifically, we use $\displaystyle \mathcal{H} ,\mathcal{L}$ to represent a high-level and a low-level causal model, respectively. For each variable $\displaystyle X$, we notate its domain as $\displaystyle \mathbb{V}_{X}$. For   $\displaystyle X$ in $\displaystyle \mathcal{H}$, $\displaystyle ( \pi_X ,\tau _{X})$ is an alignment that pairs a high-level variable $\displaystyle X$ with a set of low-level variables $\displaystyle \pi_X$ and maps variable values of $\Pi_{X}$ to variable values of $X$, i.e.,
+$\displaystyle \tau _{X} :\prod _{Z\in \pi_X}\mathbb{V}_{Z}\rightarrow \mathbb{V}_{X}$.
+% between $\displaystyle X$ and $\displaystyle \pi_X$. 
+Moreover, we define an alignment $\displaystyle \Pi $ of two models $\displaystyle \mathcal{H} ,\mathcal{L}$ as a collection of variable alignments, i.e., $\displaystyle \Pi =(\{\pi_X\} ,\{\tau _{X}\})$. Given a causal model $\displaystyle \mathcal{M}$, we define $\displaystyle \mathcal{M}_{V\leftarrow v}( x)$ to be the output of $\displaystyle \mathcal{M}$ with input $\displaystyle x$ after setting $\displaystyle V = v$. For $\displaystyle \mathcal{M}$, where $\{s_{k}\}$ is a source input setting and $\{V_k\}$ is a set of intermediate variables, the interchange intervention (\textit{II}) is defined as: 
+\begin{align*}
+\textit{II}(\mathcal{M} ,\{s_{k}\} ,\{V_{k}\})( b) & =\mathcal{M}_{V_{k}\leftarrow \text{GetVals}_{V_{k}}(\mathcal{M}( s_{k}))}( b) ,
+\end{align*}
+where $\displaystyle \text{GetVals}_{V_k}(\mathcal{M}( s_k))$ is the value of variables $\displaystyle V$ in model $\displaystyle \mathcal{M}( s)$. Similarly, one can define \textit{II} with multiple sources as in \cite{geiger2023causal,geiger-etal-2023-DAS}. Ideally, we want the alignment $\displaystyle \Pi $ to satisfy 
+\begin{align*}
+\tau ( \textit{II}(\mathcal{L} ,s,\pi_X)( b)) & =\textit{II}(\mathcal{H} ,\tau ( s) ,X)( \tau ( b)) .
+\end{align*}
+
+%where \{s_{k}\} is a source input setting and \{\mathcal{V}_k\} is a set of intermediate variables
+
+\textbf{Distributed Alignment Search (DAS).} Standard-basis interventions implicitly assume that a high-level variable is localized in a particular set of neurons, but neural representations are often distributed across overlapping directions \citep{smolensky1986neural,olah2020zoom,Scherlis2022,geiger-etal-2023-DAS}. Distributed Alignment Search (DAS) addresses this by replacing ``localist'' alignment search with gradient-based search over distributed linear subspaces. Concretely, for a high-level variable \(X\) and a candidate low-level representation \(\mathbf h_{\pi_X}\in\mathbb R^n\), DAS learns an orthogonal matrix \(R_\theta\) and aligns \(X\) with a \(k\)-dimensional subspace of the rotated representation \(R_\theta(\mathbf h_{\pi_X})\), rather than with coordinates in the standard basis \citep{geiger-etal-2023-DAS}. A distributed interchange intervention rotates the base and source representations, swaps the aligned subspace from source into base, and rotates back before continuing the forward pass. The low-level and high-level models are kept fixed; only the alignment parameters are trained so that the intervened low-level output matches the high-level intervention on \(X\). As a variant of DAS, boundless DAS keeps the same objective of searching for better alignments, but replaces the hand-specified subspace size with learned soft boundaries, making the method more scalable \citep{wu-etal-2023-Boundless-DAS}.
+
+% \textbf{Distributed Alignment Search (DAS).} Standard-basis interventions assume that a high-level variable is localized in a particular set of neurons, but neural representations are often distributed across overlapping directions \citep{smolensky1986neural,geiger-etal-2023-DAS}. DAS addresses this by searching for a \emph{better alignment}: instead of brute-force search over neuron-level alignments in the standard basis, it uses gradient descent to align a high-level variable \(X\) with a \(k\)-dimensional subspace of a rotated representation \(R_\theta(\mathbf h_{\pi_X})\) \citep{geiger-etal-2023-DAS}. A distributed interchange intervention rotates the base and source representations, swaps the aligned subspace from source into base, and rotates back before continuing the forward pass. The low-level and high-level models are kept fixed; only the alignment parameters are trained so that the intervened low-level output matches the high-level intervention on \(X\). As a variant of DAS, boundless DAS keeps the same objective of searching for better alignments, but replaces the hand-specified subspace size with learned soft boundaries, making the method more scalable \citep{wu-etal-2023-Boundless-DAS}.
+
+
+% % More often than not,
+% % perfect alignment due to interchange interventions is hard to achieve. 
+% % Instead of concluding  Building on 
+% If $\mathcal{H}$ is not found to be a causal abstraction of $\mathcal{L}$ with interchange interventions, it is quite possible that 
+% this
+% % the abstraction failure 
+% is due to the arbitrary choice of carrying out interchange interventions in the standard basis.
+% % our having chosen the standard basis for interventions at the outset. 
+% Indeed, \citet{smolensky1986neural} presses that individual concepts can be distributed over multiple neurons.
+
+% \textbf{Distributed Alignment Search (DAS).} Building on \citet{smolensky1986neural}'s perspective,
+% % on this insight,
+% \citet{geiger-etal-2023-DAS} propose DAS:
+% % , a method for finding such distributed representations: 
+% instead of aligning $X$ with $\pi_X$ in the standard basis, we can seek to align $X$ with $\bm{\mathrm{B}} \pi_X$, i.e., $\pi_X$ rotated with a change-of-basis matrix $\bm{\mathrm{B}}$. The task of finding the most helpful rotations can be automated with stochastic gradient descent. DAS has emerged as a competitive interpretability method, outperforming probes, PCA, LDA, etc., on a range of tasks \citep{arora-etal-2024-causalgym}. 
+% % (Have to iterate on this. Add Arora's CausalGym reference for how DAS outperforms other interp methods.)
+
+\textbf{Sparse Autoencoders (SAEs).} To decompose the dense and polysemantic representations of a language model into interpretable components \citep{elhage2022toy}, we leverage Sparse Autoencoders (SAEs) \citep{bricken2023towards, cunningham2023sparse}. An SAE provides a method for mapping an activation vector $x \in \mathbb{R}^d$ to a high-dimensional, sparse feature space $f(x) \in \mathbb{R}^m$ (where $m \gg d$) via an encoder $f(x) = \text{ReLU}(W_{enc}x + b_{enc})$, such that the original activation can be reconstructed as $\hat{x} = W_{dec}f(x) + b_{dec}$. By training with an $L_1$ penalty to enforce sparsity, SAEs identify features that often correspond to discrete semantic or syntactic concepts \citep{huang2024ravel}. In our diagnostic pipeline, we use SAEs to extract model-internal features for our classifiers. 
+
+
+
+% \textcolor{red}{EXPLAIN DAS}\\
+% \textcolor{red}{EXPLAIN SAEs}

@@ -1,0 +1,169 @@
+\begin{thebibliography}{31}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Arora et~al.(2024)Arora, Jurafsky, and Potts]{arora-etal-2024-causalgym}
+Aryaman Arora, Dan Jurafsky, and Christopher Potts.
+\newblock {C}ausal{G}ym: Benchmarking causal interpretability methods on linguistic tasks.
+\newblock In Lun-Wei Ku, Andre Martins, and Vivek Srikumar, editors, \emph{Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)}, pages 14638--14663, Bangkok, Thailand, 2024. Association for Computational Linguistics.
+\newblock URL \url{https://aclanthology.org/2024.acl-long.785}.
+
+\bibitem[Boguraev et~al.(2025)Boguraev, Potts, and Mahowald]{boguraev-etal-2025-causal}
+Sasha Boguraev, Christopher Potts, and Kyle Mahowald.
+\newblock Causal interventions reveal shared structure across {E}nglish filler{--}gap constructions.
+\newblock In Christos Christodoulopoulos, Tanmoy Chakraborty, Carolyn Rose, and Violet Peng, editors, \emph{Findings of the Association for Computational Linguistics: EMNLP 2025}, pages 25032--25053, Suzhou, China, 2025. Association for Computational Linguistics.
+\newblock URL \url{https://aclanthology.org/2025.emnlp-main.1271/}.
+
+\bibitem[Bricken et~al.(2023)Bricken, Templeton, Batson, Chen, Jerome, Moore, Tamkin, Jones, Conerly, Cunningham, et~al.]{bricken2023towards}
+Adly Bricken, Adni Templeton, Joshua Batson, Brian Chen, Adam Jerome, Scott Moore, Shahar Tamkin, Landon Jones, Dustin Conerly, Hoagy Cunningham, et~al.
+\newblock Towards monosemanticity: Decomposing language models with sparse autoencoders.
+\newblock \emph{Transformer Circuits Thread}, 2023.
+
+\bibitem[Chalupka et~al.(2014)Chalupka, Perona, and Eberhardt]{chalupka2014visual}
+Krzysztof Chalupka, Pietro Perona, and Frederick Eberhardt.
+\newblock Visual causal feature learning.
+\newblock \emph{arXiv preprint arXiv:1412.2309}, 2014.
+
+\bibitem[Chalupka et~al.(2017)Chalupka, Eberhardt, and Perona]{chalupka2017causal}
+Krzysztof Chalupka, Frederick Eberhardt, and Pietro Perona.
+\newblock Causal feature learning: an overview.
+\newblock \emph{Behaviormetrika}, 44\penalty0 (1):\penalty0 137--164, 2017.
+
+\bibitem[Cunningham et~al.(2023)Cunningham, Ewart, Riggs, Huben, and Sharkey]{cunningham2023sparse}
+Hoagy Cunningham, Aidan Ewart, Logan Riggs, Robert Huben, and Lee Sharkey.
+\newblock Sparse autoencoders find highly interpretable features in language models.
+\newblock \emph{arXiv preprint arXiv:2309.08600}, 2023.
+
+\bibitem[Elhage et~al.(2022)Elhage, Hume, Olsson, Schiefer, Henighan, Kravec, Hatfield-Dodds, Lasenby, Drain, Chen, et~al.]{elhage2022toy}
+Nelson Elhage, Tristan Hume, Catherine Olsson, Nicholas Schiefer, Tom Henighan, Shauna Kravec, Zac Hatfield-Dodds, Robert Lasenby, Dawn Drain, Carol Chen, et~al.
+\newblock Toy models of superposition.
+\newblock \emph{arXiv preprint arXiv:2209.10652}, 2022.
+
+\bibitem[Geiger et~al.(2021)Geiger, Lu, Icard, and Potts]{geiger2021causal}
+Atticus Geiger, Hanson Lu, Thomas Icard, and Christopher Potts.
+\newblock Causal abstractions of neural networks.
+\newblock \emph{Advances in Neural Information Processing Systems}, 34:\penalty0 9574--9586, 2021.
+
+\bibitem[Geiger et~al.(2023{\natexlab{a}})Geiger, Ibeling, Zur, Chaudhary, Chauhan, Huang, Arora, Wu, Goodman, Potts, et~al.]{geiger2023causal}
+Atticus Geiger, Duligur Ibeling, Amir Zur, Maheep Chaudhary, Sonakshi Chauhan, Jing Huang, Aryaman Arora, Zhengxuan Wu, Noah Goodman, Christopher Potts, et~al.
+\newblock Causal abstraction: A theoretical foundation for mechanistic interpretability.
+\newblock \emph{arXiv preprint arXiv:2301.04709}, 2023{\natexlab{a}}.
+
+\bibitem[Geiger et~al.(2023{\natexlab{b}})Geiger, Wu, Potts, Icard, and Goodman]{geiger-etal-2023-DAS}
+Atticus Geiger, Zhengxuan Wu, Christopher Potts, Thomas Icard, and Noah Goodman.
+\newblock Finding alignments between interpretable causal variables and distributed neural representations.
+\newblock 2023{\natexlab{b}}.
+
+\bibitem[Geiger et~al.(2025)Geiger, Ibeling, Zur, Chaudhary, Chauhan, Huang, Arora, Wu, Goodman, Potts, et~al.]{geiger2025causal}
+Atticus Geiger, Duligur Ibeling, Amir Zur, Maheep Chaudhary, Sonakshi Chauhan, Jing Huang, Aryaman Arora, Zhengxuan Wu, Noah Goodman, Christopher Potts, et~al.
+\newblock Causal abstraction: A theoretical foundation for mechanistic interpretability.
+\newblock \emph{Journal of Machine Learning Research}, 26\penalty0 (83):\penalty0 1--64, 2025.
+
+\bibitem[Geva et~al.(2021)Geva, Schuster, Berant, and Levy]{geva2021transformer}
+Mor Geva, Roei Schuster, Jonathan Berant, and Omer Levy.
+\newblock Transformer feed-forward layers are key-value memories.
+\newblock In \emph{Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing}, pages 5484--5495, 2021.
+
+\bibitem[Geva et~al.(2023)Geva, Bastings, Filippova, and Globerson]{geva2023dissecting}
+Mor Geva, Jasmijn Bastings, Katja Filippova, and Amir Globerson.
+\newblock Dissecting recall of factual associations in auto-regressive language models.
+\newblock In \emph{Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing}, pages 12216--12235, 2023.
+
+\bibitem[Gur-Arieh et~al.(2025)Gur-Arieh, Geva, and Geiger]{gur2025mixing}
+Yoav Gur-Arieh, Mor Geva, and Atticus Geiger.
+\newblock Mixing mechanisms: How language models retrieve bound entities in-context.
+\newblock \emph{arXiv preprint arXiv:2510.06182}, 2025.
+
+\bibitem[He et~al.(2024)He, Shu, Ge, Chen, Wang, Zhou, Liu, Guo, Huang, Wu, et~al.]{he2024llamascope}
+Zhengfu He, Wentao Shu, Xuyang Ge, Lingjie Chen, Junxuan Wang, Yunhua Zhou, Frances Liu, Qipeng Guo, Xuanjing Huang, Zuxuan Wu, et~al.
+\newblock Llama scope: Extracting millions of features from llama-3.1-8b with sparse autoencoders.
+\newblock \emph{arXiv preprint arXiv:2410.20526}, 2024.
+
+\bibitem[Hernandez et~al.(2023)Hernandez, Sharma, Haklay, Meng, Wattenberg, Andreas, Belinkov, and Bau]{hernandez2023linearity}
+Evan Hernandez, Arnab~Sen Sharma, Tal Haklay, Kevin Meng, Martin Wattenberg, Jacob Andreas, Yonatan Belinkov, and David Bau.
+\newblock Linearity of relation decoding in transformer language models.
+\newblock \emph{arXiv preprint arXiv:2308.09124}, 2023.
+
+\bibitem[Huang et~al.(2024)Huang, Wu, Potts, Geva, and Geiger]{huang2024ravel}
+Jing Huang, Zhengxuan Wu, Christopher Potts, Mor Geva, and Atticus Geiger.
+\newblock Ravel: Evaluating interpretability methods on disentangling language model representations.
+\newblock In \emph{Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)}, pages 8669--8687, 2024.
+
+\bibitem[Huang et~al.(2025)Huang, Tao, Icard, Yang, and Potts]{huanginternal}
+Jing Huang, Junyi Tao, Thomas Icard, Diyi Yang, and Christopher Potts.
+\newblock Internal causal mechanisms robustly predict language model out-of-distribution behaviors.
+\newblock In \emph{Forty-second International Conference on Machine Learning}, 2025.
+
+\bibitem[Lieberum et~al.(2024)Lieberum, Rajamanoharan, Conmy, Smith, Sonnerat, Varma, Kram{\'a}r, Dragan, Shah, and Nanda]{lieberum2024gemmascope}
+Tom Lieberum, Senthooran Rajamanoharan, Arthur Conmy, Lewis Smith, Nicolas Sonnerat, Vikrant Varma, J{\'a}nos Kram{\'a}r, Anca Dragan, Rohin Shah, and Neel Nanda.
+\newblock Gemma scope: Open sparse autoencoders everywhere all at once on gemma 2.
+\newblock \emph{arXiv preprint arXiv:2408.05147}, 2024.
+
+\bibitem[Makelov et~al.(2023)Makelov, Lange, and Nanda]{makelov2023subspace}
+Aleksandar Makelov, Georg Lange, and Neel Nanda.
+\newblock Is this the subspace you are looking for? an interpretability illusion for subspace activation patching.
+\newblock \emph{arXiv preprint arXiv:2311.17030}, 2023.
+
+\bibitem[M{\'e}loux et~al.(2025)M{\'e}loux, Maniu, Portet, and Peyrard]{meloux2025everything}
+Maxime M{\'e}loux, Silviu Maniu, Fran{\c{c}}ois Portet, and Maxime Peyrard.
+\newblock Everything, everywhere, all at once: is mechanistic interpretability identifiable?
+\newblock \emph{arXiv preprint arXiv:2502.20914}, 2025.
+
+\bibitem[Meng et~al.(2022{\natexlab{a}})Meng, Bau, Andonian, and Belinkov]{meng2022locating}
+Kevin Meng, David Bau, Alex Andonian, and Yonatan Belinkov.
+\newblock Locating and editing factual associations in {GPT}.
+\newblock \emph{Advances in Neural Information Processing Systems}, 36, 2022{\natexlab{a}}.
+
+\bibitem[Meng et~al.(2022{\natexlab{b}})Meng, Sharma, Andonian, Belinkov, and Bau]{meng2022mass}
+Kevin Meng, Arnab~Sen Sharma, Alex Andonian, Yonatan Belinkov, and David Bau.
+\newblock Mass-editing memory in a transformer.
+\newblock \emph{arXiv preprint arXiv:2210.07229}, 2022{\natexlab{b}}.
+
+\bibitem[Olah et~al.(2020)Olah, Cammarata, Schubert, Goh, Petrov, and Carter]{olah2020zoom}
+Chris Olah, Nick Cammarata, Ludwig Schubert, Gabriel Goh, Michael Petrov, and Shan Carter.
+\newblock Zoom in: An introduction to circuits.
+\newblock \emph{Distill}, 2020.
+\newblock \doi{10.23915/distill.00024.001}.
+\newblock https://distill.pub/2020/circuits/zoom-in.
+
+\bibitem[Pearl(2009)]{pearl2009causality}
+Judea Pearl.
+\newblock \emph{Causality}.
+\newblock Cambridge university press, 2009.
+
+\bibitem[Scherlis et~al.(2022)Scherlis, Sachan, Jermyn, Benton, and Shlegeris]{Scherlis2022}
+Adam Scherlis, Kshitij Sachan, Adam~S. Jermyn, Joe Benton, and Buck Shlegeris.
+\newblock Polysemanticity and capacity in neural networks.
+\newblock \emph{CoRR}, abs/2210.01892, 2022.
+\newblock \doi{10.48550/ARXIV.2210.01892}.
+\newblock URL \url{https://doi.org/10.48550/arXiv.2210.01892}.
+
+\bibitem[Smolensky(1986)]{smolensky1986neural}
+Paul Smolensky.
+\newblock Neural and conceptual interpretation of pdp models.
+\newblock \emph{Parallel distributed processing: Explorations in the microstructure of cognition}, 2:\penalty0 390--431, 1986.
+
+\bibitem[Sundararajan et~al.(2017)Sundararajan, Taly, and Yan]{sundararajan2017axiomatic}
+Mukund Sundararajan, Ankur Taly, and Qiqi Yan.
+\newblock Axiomatic attribution for deep networks.
+\newblock In \emph{International conference on machine learning}, pages 3319--3328. PMLR, 2017.
+
+\bibitem[Wu et~al.(2023)Wu, Geiger, Icard, Potts, and Goodman]{wu-etal-2023-Boundless-DAS}
+Zhengxuan Wu, Atticus Geiger, Thomas Icard, Christopher Potts, and Noah Goodman.
+\newblock Interpretability at scale: Identifying causal mechanisms in alpaca.
+\newblock 2023.
+
+\bibitem[Wu et~al.(2024{\natexlab{a}})Wu, Geiger, Arora, Huang, Wang, Goodman, Manning, and Potts]{wu2024pyvene}
+Zhengxuan Wu, Atticus Geiger, Aryaman Arora, Jing Huang, Zheng Wang, Noah~D Goodman, Christopher~D Manning, and Christopher Potts.
+\newblock pyvene: A library for understanding and improving pytorch models via interventions.
+\newblock \emph{arXiv preprint arXiv:2403.07809}, 2024{\natexlab{a}}.
+
+\bibitem[Wu et~al.(2024{\natexlab{b}})Wu, Geiger, Huang, Arora, Icard, Potts, and Goodman]{wu2024reply}
+Zhengxuan Wu, Atticus Geiger, Jing Huang, Aryaman Arora, Thomas Icard, Christopher Potts, and Noah~D Goodman.
+\newblock A reply to makelov et al.(2023)'s" interpretability illusion" arguments.
+\newblock \emph{arXiv preprint arXiv:2401.12631}, 2024{\natexlab{b}}.
+
+\end{thebibliography}

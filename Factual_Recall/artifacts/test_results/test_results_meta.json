@@ -1,6 +1,0 @@
-{
-  "target_attribute": "language",
-  "n_test_dataset": 445,
-  "n_graph_nodes": 200,
-  "test_data_path": "/home/jytan12/causal_abs_cs224n/Multi_Variable_Causal_Abstraction/Factual_Recall/artifacts/step1_accuracy_processed.jsonl"
-}

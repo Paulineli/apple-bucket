@@ -1,0 +1,32 @@
+{
+  "bucket_mode": "classifier",
+  "n": 199,
+  "overall_iia": 0.7556976803207959,
+  "overall_undirected_density": 0.7556976803207959,
+  "overall_directed_iia": 0.8560225369270595,
+  "buckets": [
+    {
+      "bucket": 0,
+      "n": 87,
+      "undirected_density": 1.0,
+      "num_undirected_edges": 3741,
+      "directed_iia": 1.0,
+      "directed_correct": 7482,
+      "directed_pairs": 7482
+    },
+    {
+      "bucket": 1,
+      "n": 112,
+      "undirected_density": 0.6608751608751608,
+      "num_undirected_edges": 4108,
+      "directed_iia": 0.765926640926641,
+      "directed_correct": 9522,
+      "directed_pairs": 12432
+    }
+  ],
+  "graph_dataset_path": "partition_results_das/graph_dataset_200_op4.pkl",
+  "adjacency_path": "partition_results_das/graph_das_L5_P78_200_op4_with_directed.pkl",
+  "directed_adjacency_path": null,
+  "classifier_path": "linear_classifiers_das/sae_l1_lr_full_features_L5_P78_interventionop4.pkl",
+  "partition_json": null
+}

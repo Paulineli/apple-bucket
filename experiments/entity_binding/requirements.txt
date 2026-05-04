@@ -1,0 +1,36 @@
+# Requirements for run_das.py
+# Python >=3.10 is required (as specified by the causalab package)
+# This script requires the causalab package and its dependencies
+
+# Core deep learning and ML libraries
+torch
+transformers
+datasets
+numpy
+scikit-learn
+
+# Causal abstraction and intervention libraries
+# pyvene must be installed from the main branch (required by causalab)
+pyvene @ git+https://github.com/stanfordnlp/pyvene.git@main
+nnsight>=0.5.9
+
+# Data processing and visualization
+pandas
+matplotlib
+seaborn
+dash
+dash-cytoscape
+jupyter-dash
+
+# Utilities
+tqdm
+rich
+networkx
+
+# Optional but commonly used
+tensorboard
+
+# Note: The causalab package is at the project root (Multi_Variable_Causal_Abstraction/causalab)
+# Install it with: pip install -e causalab  (from project root)
+# Or ensure it's in your Python path (scripts add ../../causalab to sys.path when run from hypothesis_testing)
+

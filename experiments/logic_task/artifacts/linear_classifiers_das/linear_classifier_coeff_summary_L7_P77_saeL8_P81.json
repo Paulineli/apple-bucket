@@ -1,0 +1,70 @@
+{
+  "partition_path": "experiments/logic_task/artifacts/partition_results_das/partition_results_das_L7_P77_K2_200_op5.json",
+  "graph_dataset_path": "experiments/logic_task/artifacts/partition_results_das/graph_dataset_200_op5_ds.pkl",
+  "partition_layer": 7,
+  "partition_pos_num": 77,
+  "sae_layer": 8,
+  "sae_pos_num": 81,
+  "cluster_0_id_high_iia": 1,
+  "cluster_1_id_low_iia": 0,
+  "natural_classifier": {
+    "model_path": "experiments/logic_task/artifacts/linear_classifiers_das/natural_lr_op1_op2_op3_L7_P77_interventionop5.pkl",
+    "test_accuracy": 0.975,
+    "top5": [
+      {
+        "feature": "op2",
+        "feature_index": 1,
+        "coefficient": -2.953451759272699,
+        "abs_coefficient": 2.953451759272699
+      },
+      {
+        "feature": "op1",
+        "feature_index": 0,
+        "coefficient": -2.4760000096623678,
+        "abs_coefficient": 2.4760000096623678
+      },
+      {
+        "feature": "op3",
+        "feature_index": 2,
+        "coefficient": 0.3756119438721737,
+        "abs_coefficient": 0.3756119438721737
+      }
+    ]
+  },
+  "sae_classifier": {
+    "model_path": "experiments/logic_task/artifacts/linear_classifiers_das/sae_l1_lr_full_features_L8_P81_interventionop5.pkl",
+    "test_accuracy": 0.85,
+    "top5": [
+      {
+        "feature": "sae_f23174",
+        "feature_index": 23174,
+        "coefficient": 0.8767963647842407,
+        "abs_coefficient": 0.8767963647842407
+      },
+      {
+        "feature": "sae_f16728",
+        "feature_index": 16728,
+        "coefficient": -0.39030522108078003,
+        "abs_coefficient": 0.39030522108078003
+      },
+      {
+        "feature": "sae_f7423",
+        "feature_index": 7423,
+        "coefficient": 0.33950069546699524,
+        "abs_coefficient": 0.33950069546699524
+      },
+      {
+        "feature": "sae_f20188",
+        "feature_index": 20188,
+        "coefficient": 0.3205965757369995,
+        "abs_coefficient": 0.3205965757369995
+      },
+      {
+        "feature": "sae_f6042",
+        "feature_index": 6042,
+        "coefficient": 0.2783624827861786,
+        "abs_coefficient": 0.2783624827861786
+      }
+    ]
+  }
+}

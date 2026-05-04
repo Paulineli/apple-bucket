@@ -1,0 +1,68 @@
+{
+  "partition_path": "experiments/logic_task/artifacts/partition_results_das/partition_results_das_L7_P77_K2_200_op5.json",
+  "graph_dataset_path": "experiments/logic_task/artifacts/partition_results_das/graph_dataset_200_op5_ds.pkl",
+  "layer": 7,
+  "pos_num": 77,
+  "cluster_0_id_high_iia": 1,
+  "cluster_1_id_low_iia": 0,
+  "natural_classifier": {
+    "model_path": "experiments/logic_task/artifacts/linear_classifiers_das/natural_lr_op1_op2_op3_L7_P77_interventionop5.pkl",
+    "test_accuracy": 0.975,
+    "top5": [
+      {
+        "feature": "op2",
+        "feature_index": 1,
+        "coefficient": -2.953451759272699,
+        "abs_coefficient": 2.953451759272699
+      },
+      {
+        "feature": "op1",
+        "feature_index": 0,
+        "coefficient": -2.4760000096623678,
+        "abs_coefficient": 2.4760000096623678
+      },
+      {
+        "feature": "op3",
+        "feature_index": 2,
+        "coefficient": 0.3756119438721737,
+        "abs_coefficient": 0.3756119438721737
+      }
+    ]
+  },
+  "sae_classifier": {
+    "model_path": "experiments/logic_task/artifacts/linear_classifiers_das/sae_l1_lr_full_features_L7_P77_interventionop5.pkl",
+    "test_accuracy": 0.575,
+    "top5": [
+      {
+        "feature": "sae_f4619",
+        "feature_index": 4619,
+        "coefficient": 0.9240860939025879,
+        "abs_coefficient": 0.9240860939025879
+      },
+      {
+        "feature": "sae_f20645",
+        "feature_index": 20645,
+        "coefficient": 0.7328819036483765,
+        "abs_coefficient": 0.7328819036483765
+      },
+      {
+        "feature": "sae_f17523",
+        "feature_index": 17523,
+        "coefficient": -0.7283967733383179,
+        "abs_coefficient": 0.7283967733383179
+      },
+      {
+        "feature": "sae_f1112",
+        "feature_index": 1112,
+        "coefficient": -0.5203069448471069,
+        "abs_coefficient": 0.5203069448471069
+      },
+      {
+        "feature": "sae_f22895",
+        "feature_index": 22895,
+        "coefficient": -0.5167347192764282,
+        "abs_coefficient": 0.5167347192764282
+      }
+    ]
+  }
+}

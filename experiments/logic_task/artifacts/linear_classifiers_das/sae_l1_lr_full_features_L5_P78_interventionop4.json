@@ -1,0 +1,54 @@
+{
+  "feature_type": "sae_feature_activations",
+  "sae_layer": 5,
+  "sae_pos_num": 78,
+  "partition_path": "experiments/logic_task/artifacts/partition_results_das/partition_results_das_L5_P78_K2_200_op4.json",
+  "graph_dataset_path": "experiments/logic_task/artifacts/partition_results_das/graph_dataset_200_op4.pkl",
+  "cluster_0_id_high_iia": 0,
+  "cluster_1_id_low_iia": 1,
+  "label_definition": "y=1 iff sample is in lower IIA cluster",
+  "train_accuracy": 0.9433962264150944,
+  "test_accuracy": 0.925,
+  "classifier_params": {
+    "penalty": "l1",
+    "solver": "saga",
+    "C": 0.01,
+    "max_iter": 2000,
+    "random_state": 42,
+    "n_jobs": -1
+  },
+  "n_features": 24576,
+  "n_nonzero_coefficients": 1,
+  "top_coefficients": [
+    {
+      "feature": "sae_f24362",
+      "feature_index": 24362,
+      "coefficient": -0.3143417537212372,
+      "abs_coefficient": 0.3143417537212372
+    },
+    {
+      "feature": "sae_f24575",
+      "feature_index": 24575,
+      "coefficient": 0.0,
+      "abs_coefficient": 0.0
+    },
+    {
+      "feature": "sae_f8183",
+      "feature_index": 8183,
+      "coefficient": 0.0,
+      "abs_coefficient": 0.0
+    },
+    {
+      "feature": "sae_f8185",
+      "feature_index": 8185,
+      "coefficient": 0.0,
+      "abs_coefficient": 0.0
+    },
+    {
+      "feature": "sae_f8186",
+      "feature_index": 8186,
+      "coefficient": 0.0,
+      "abs_coefficient": 0.0
+    }
+  ]
+}
