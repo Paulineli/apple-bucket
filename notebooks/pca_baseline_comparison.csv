@@ -1,0 +1,9 @@
+Experiment,Method,Target size,Target IIA,Other size,Other IIA,Weighted-mean IIA,Overall IIA,ARI vs paper,NMI vs paper
+Logic o4 @ L5/P78,Paper (quasi-clique),115,0.98,84,0.684,0.855,0.756,—,—
+Logic o4 @ L5/P78,PCA baseline,103,1.0,96,0.619,0.816,0.756,0.772,0.727
+Logic o5 @ L7/P77,Paper (quasi-clique),142,0.981,58,0.891,0.955,0.616,—,—
+Logic o5 @ L7/P77,PCA baseline,40,0.95,160,0.604,0.674,0.616,0.039,0.008
+Entity Binding @ L15,Paper (quasi-clique),129,0.981,378,0.11,0.332,0.238,—,—
+Entity Binding @ L15,PCA baseline,111,0.998,396,0.126,0.317,0.238,0.852,0.774
+RAVEL Language @ L14,Paper (quasi-clique),54,0.981,146,0.106,0.342,0.246,—,—
+RAVEL Language @ L14,PCA baseline,60,0.274,140,0.211,0.23,0.246,0.043,0.011

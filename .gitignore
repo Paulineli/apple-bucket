@@ -13,8 +13,14 @@ experiments/entity_binding/outputs/
 # Optional local HF cache at repo root
 .hf_cache/
 
-# Fine-tuned GPT-2 weights (large; download or train locally)
+# Fine-tuned GPT-2 weights (large; auto-downloaded from HF: PaulineLi/bucketing-good-apples-gpt2-logic)
 experiments/logic_task/artifacts/models/fine_tuned_gpt2_or/
+
+# Model weight files anywhere (exceed GitHub's 100MB per-file limit)
+*.safetensors
+*.bin
+*.ckpt
+notebooks/model.safetensors
 
 # Factual-recall DAS featurizer dumps (> GitHub 100MB file limit)
 experiments/factual_recall/artifacts/das_best_featurizer/
