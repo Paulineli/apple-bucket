@@ -60,7 +60,7 @@ For gated models, put a Hugging Face token in `experiments/factual_recall/hf_tok
 
 [`notebooks/pca_baselines.ipynb`](notebooks/pca_baselines.ipynb) is a self-contained Colab notebook added in response to a reviewer request for a simpler diagnostic baseline. It replaces **Step 2** of the pipeline (interchange graph + quasi-clique partition) with a plain **PCA + K-means** partition on raw residual-stream activations, then compares the two on identical interchange graphs across all four configurations (Logic L5/P78, Logic L7/P77, Entity Binding L15, RAVEL Language L14) using per-bucket IIA and label-agreement metrics (ARI / NMI). Quasi-cliques are recomputed at the paper's stated `γ = 0.98`.
 
-Outputs (committed alongside the notebook): [`pca_baseline_comparison.csv`](notebooks/pca_baseline_comparison.csv), [`pca_baseline_comparison.json`](notebooks/pca_baseline_comparison.json), and the rendered table [`pca_baseline_table.png`](notebooks/pca_baseline_table.png). The notebook does not depend on the `causalab` submodule. To run the Logic rows with the fine-tuned GPT-2 checkpoint, set `GPT2_WEIGHTS_URL` in the setup cell to your own download link.
+Outputs (committed alongside the notebook): [`pca_baseline_comparison.csv`](notebooks/pca_baseline_comparison.csv), [`pca_baseline_comparison.json`](notebooks/pca_baseline_comparison.json), and the rendered table [`pca_baseline_table.png`](notebooks/pca_baseline_table.png). The notebook does not depend on the `causalab` submodule. The Logic rows use the fine-tuned GPT-2 checkpoint published on the Hugging Face Hub at [`PaulineLi/bucketing-good-apples-gpt2-logic`](https://huggingface.co/PaulineLi/bucketing-good-apples-gpt2-logic) (public; the notebook downloads it automatically).
 
 ## Large artifacts
 
